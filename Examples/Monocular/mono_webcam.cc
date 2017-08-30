@@ -18,91 +18,253 @@
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <iostream>
+#include <algorithm>
+#include <fstream>
+#include <chrono>
+#include <ctime>
 
-#include<iostream>
-#include<algorithm>
-#include<fstream>
-#include<chrono>
+#include <System.h>
+#include <tclap/CmdLine.h>
+#include <opencv2/core/core.hpp>
+#include <pangolin/pangolin.h>
 
-#include<opencv2/core/core.hpp>
-
-#include<System.h>
-
-#include<time.h>
 
 using namespace std;
 
-// From http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/
 
-int main(int argc, char **argv)
+int parseProgramArguments(int argc, const char *argv[]);
+void initPangolinARWindow(const string& strSettingPath, pangolin::View& viewVirtual, pangolin::View& viewReal, pangolin::OpenGlRenderState& s_cam);
+void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewVirtual, pangolin::View& viewReal, pangolin::OpenGlRenderState& s_cam, cv::Mat pose, cv::Mat camFrame);
+string vocabPath;
+string settingsPath;
+
+int cameraIndex;
+int cameraFps;
+int cameraWidth;
+int cameraHeight;
+
+
+#define radiansToDegrees(angleRadians) (angleRadians * 180.0 / M_PI)
+void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewVirtual, pangolin::View& viewReal, pangolin::OpenGlRenderState& s_cam, cv::Mat pose, cv::Mat camFrame)
 {
-	string vocabPath = "../ORBvoc.txt";
-	string settingsPath = "../webcam.yaml";
-	if (argc == 1)
+	if (!pangolin::ShouldQuit())
 	{
+		cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
+		cv::cvtColor(camFrame, camFrame, CV_BGR2RGB);
+		pangolin::GlTexture imageTexture(camFrame.cols, camFrame.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
+		imageTexture.Upload(camFrame.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
 
-	}
-	else if (argc == 2)
-	{
-		vocabPath = argv[1];
-	}
-	else if (argc == 3)
-	{
-		vocabPath = argv[1];
-		settingsPath = argv[2];
-	}
-    else
-    {
-        cerr << endl << "Usage: mono_webcam.exe path_to_vocabulary path_to_settings" << endl;
-        return 1;
-    }
+		int width = 640, height = 480;
 
-    // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM2::System SLAM(vocabPath, settingsPath,ORB_SLAM2::System::MONOCULAR,true);
+		GLfloat znear = 0.01, zfar = 20;
+
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glViewport(0, 0, width, height);
+		glMatrixMode(GL_PROJECTION);
+
+
+
+		viewReal.Activate();
+		glDisable(GL_DEPTH_TEST);
+		glColor3f(1.0, 1.0, 1.0);
+		imageTexture.RenderToViewport(true);
+
+		//viewVirtual.Activate(s_cam);
+		if (!pose.empty())
+		{
+			float rx = atan2f(pose.at<float>(2, 1), pose.at<float>(2, 2));
+			float ry = atan2f(-pose.at<float>(2, 0), sqrtf(pow(pose.at<float>(2, 1), 2) + pow(pose.at<float>(2, 2), 2)));
+			float rz = atan2f(pose.at<float>(1, 0), pose.at<float>(0, 0));
+			float rxd = radiansToDegrees(rx);
+			float ryd = radiansToDegrees(ry);
+			float rzd = radiansToDegrees(rz);
+			float tx = pose.at<float>(0, 3);
+			float ty = pose.at<float>(1, 3);
+			float tz = pose.at<float>(2, 3);
+
+			cout << rxd << " " << ryd << " " << rzd << endl;
+			cout << tx << " " << ty << " " << tz << endl << endl;
+
+			GLfloat m[4][4];
+			GLfloat fx = width, fy = width, cx = width / 2, cy = height / 2;
+			m[0][0] = 2.0 * fx / width;
+			m[0][1] = 0.0;
+			m[0][2] = 0.0;
+			m[0][3] = 0.0;
+
+			m[1][0] = 0.0;
+			m[1][1] = -2.0 * fy / height;
+			m[1][2] = 0.0;
+			m[1][3] = 0.0;
+
+			m[2][0] = 1.0 - 2.0 * cx / width;
+			m[2][1] = 2.0 * cy / height - 1.0;
+			m[2][2] = (zfar + znear) / (znear - zfar);
+			m[2][3] = -1.0;
+
+			m[3][0] = 0.0;
+			m[3][1] = 0.0;
+			m[3][2] = 2.0 * zfar * znear / (znear - zfar);
+			m[3][3] = 0.0;
+			glLoadIdentity();
+			glMultMatrixf((GLfloat *)m);
+
+			glTranslated(tx, ty, -tz);
+			glRotated(rzd, 0.0, 0.0, 1.0);
+			glRotated(-ryd, 0.0, 1.0, 0.0);
+			glRotated(-rxd, 1.0, 0.0, 0.0);
+
+
+			//pangolin::glDrawAxis(1000000.f);
+			glEnable(GL_DEPTH_TEST);
+			pangolin::glDrawColouredCube(-0.05f, 0.05f);
+			
+		}
+		else {
+			pangolin::glDrawAxis(1000000.f);
+		}
+
+		// Swap frames and Process Events
+		pangolin::FinishFrame();
+	}
+}
+
+void renderPangolinTestFrame(pangolin::View& d_cam, pangolin::OpenGlRenderState& s_cam, cv::Mat camFrame)
+{
+	if (!pangolin::ShouldQuit())
+	{
+		pangolin::GlTexture imageTexture(camFrame.cols, camFrame.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
+		imageTexture.Upload(camFrame.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
+
+		// Clear screen and activate view to render into
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		d_cam.Activate();
+
+		
+
+		//display the image
+		glColor3f(1.0, 1.0, 1.0);
+		imageTexture.RenderToViewport();
+		
+		d_cam.Activate(s_cam);
+
+		// Render OpenGL Cube
+		pangolin::glDrawAxis(1.0f);
+
+		// Swap frames and Process Events
+		pangolin::FinishFrame();
+	}
+}
+
+void initPangolinARWindow(const string& strSettingPath, pangolin::View& viewVirtual, pangolin::View& viewReal, pangolin::OpenGlRenderState& s_cam)
+{
+	cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
+
+	pangolin::CreateWindowAndBind("Main", cameraWidth, cameraHeight);
+	glEnable(GL_DEPTH_TEST);
+
+	// Define Projection and initial ModelView matrix
+	s_cam = pangolin::OpenGlRenderState(
+		pangolin::ProjectionMatrix(cameraWidth, cameraHeight, fSettings["Camera.fx"], fSettings["Camera.fy"], fSettings["Camera.cx"], fSettings["Camera.cy"], 0.2, 100),
+		pangolin::ModelViewLookAt(-2, 2, -2, 0, 0, 0, pangolin::AxisY)
+	);
+
+	viewReal = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-cameraWidth / (double)cameraHeight);
+	viewVirtual = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-cameraWidth / (double)cameraHeight).SetLayout(pangolin::LayoutOverlay);
+	
+
+	return;
+}
+
+
+int main2(int argc, const char *argv[])
+{
+	// parse the command line args
+	int res = parseProgramArguments(argc, argv);
+	if (res == 1) {
+		cerr << "[Warning] -- Failed to parse command line arguments -- exiting." << endl;
+		return EXIT_FAILURE;
+	}
+
+	// Set up the opengl AR frame
+	pangolin::OpenGlRenderState s_cam;
+	pangolin::View viewReal, viewVirtual;
+	initPangolinARWindow(settingsPath, viewVirtual, viewReal, s_cam);
+
+	// Set up webcam
+	cv::VideoCapture cap(cameraIndex);
+	if (cameraFps > 0) cap.set(CV_CAP_PROP_FPS, cameraFps);
+	if (cameraWidth > 0) cap.set(CV_CAP_PROP_FRAME_WIDTH, cameraWidth);
+	if (cameraHeight > 0) cap.set(CV_CAP_PROP_FRAME_HEIGHT, cameraHeight);
+
+	cv::Mat im;
+	while (true)
+	{
+		cap >> im;
+		renderPangolinTestFrame(viewReal, s_cam, im);
+	}
+	return 0;
+}
+
+int main(int argc, const char *argv[])
+{
+	// parse the command line args
+	int res = parseProgramArguments(argc, argv);
+	if (res == 1) {
+		cerr << "[Warning] -- Failed to parse command line arguments -- exiting." << endl;
+		return EXIT_FAILURE;
+	}
+
+	// Set up the opengl AR frame
+	pangolin::OpenGlRenderState s_cam;
+	pangolin::View viewReal, viewVirtual;
+	initPangolinARWindow(settingsPath, viewVirtual, viewReal, s_cam);
+	
+	// Set up webcam
+	cv::VideoCapture cap(cameraIndex);
+	if (cameraFps > 0) cap.set(CV_CAP_PROP_FPS, cameraFps);
+	if (cameraWidth > 0) cap.set(CV_CAP_PROP_FRAME_WIDTH, cameraWidth);
+	if (cameraHeight > 0) cap.set(CV_CAP_PROP_FRAME_HEIGHT, cameraHeight);
+
+	// Test the webcam
+	cv::Mat test;
+	do
+	{
+		cap >> test;
+		imshow("Testing video - press any key to continue", test);
+	} while (cv::waitKey(1) == 255);
+	cv::destroyAllWindows();
+
+	// Create SLAM system. It initializes all system threads and gets ready to process frames.
+	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true);
 
     cout << endl << "-------" << endl;
-    cout << "Start processing sequence ..." << endl;
+	cout << "Start processing sequence ..." << endl;
 
-	cv::VideoCapture cap(0);
-
+	// Main loop
+	cv::Mat im;
+	cv::Mat cameraPose;
 
 	// From http://stackoverflow.com/questions/19555121/how-to-get-current-timestamp-in-milliseconds-since-1970-just-the-way-java-gets
 	__int64 now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
-
-	// Main loop
-	cv::Mat im;
-	cv::Mat Tcw;
     while (true)
     {
-		cap.read(im);
+		cap >> im;
 
 		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
 		// Pass the image to the SLAM system
-		Tcw = SLAM.TrackMonocular(im, curNow / 1000.0);
-
-		/* This can write each image with its position to a file if you want
-		if (!Tcw.empty())
-		{
-			cv::Mat Rwc = Tcw.rowRange(0, 3).colRange(0, 3).t();
-			cv::Mat twc = -Rwc*Tcw.rowRange(0, 3).col(3);
-			std::ostringstream stream;
-			//stream << "imgs/" << Rwc.at<float>(0, 0) << " " << Rwc.at<float>(0, 1) << " " << Rwc.at<float>(0, 2) << " " << twc.at<float>(0) << " " <<
-			//	Rwc.at<float>(1, 0) << " " << Rwc.at<float>(1, 1) << " " << Rwc.at<float>(1, 2) << " " << twc.at<float>(1) << " " <<
-				//Rwc.at<float>(2, 0) << " " << Rwc.at<float>(2, 1) << " " << Rwc.at<float>(2, 2) << " " << twc.at<float>(2) << ".jpg";
-			stream << "imgs/" << curNow << ".jpg";
-			string fileName = stream.str();
-			cv::imwrite(fileName, im);
-		}
-		*/
+		cameraPose = SLAM.TrackMonocular(im, curNow / 1000.0);
+		renderPangolinARFrame(settingsPath, viewVirtual, viewReal, s_cam, cameraPose, im);
 
 		// This will make a third window with the color images, you need to click on this then press any key to quit
 		cv::imshow("Image", im);
-
-
-		if (cv::waitKey(1) >= 0)
+		if (cv::waitKey(1) != 255)
+		{
 			break;
+		}
     }
 
     // Stop all threads
@@ -113,4 +275,46 @@ int main(int argc, char **argv)
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
 
     return 0;
+	
 }
+
+int parseProgramArguments(int argc, const char *argv[])
+{
+	using namespace TCLAP;
+	try {
+		// set up the args
+		CmdLine cmd("Runs ORB_SLAM2 with a monocular webcam", ' ', "0.1");
+		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.txt", "string");
+		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
+		ValueArg<int> cameraIndexArg("c", "camIndex", "Index of the webcam to use", false, 0, "integer");
+		ValueArg<int> cameraFpsArg("f", "fps", "Desired framerate of the camera", false, 0, "integer");
+		ValueArg<int> cameraWidthArg("W", "width", "Desired width of the camera", false, 0, "integer");
+		ValueArg<int> cameraHeightArg("H", "height", "Desired height of the camera", false, 0, "integer");
+
+		// add the args
+		cmd.add(vocabPathArg);
+		cmd.add(settingsPathArg);
+		cmd.add(cameraIndexArg);
+		cmd.add(cameraFpsArg);
+		cmd.add(cameraWidthArg);
+		cmd.add(cameraHeightArg);
+
+		// parse the args
+		cmd.parse(argc, argv);
+
+		// get the results
+		vocabPath = vocabPathArg.getValue();
+		settingsPath = settingsPathArg.getValue();
+		cameraIndex = cameraIndexArg.getValue();
+		cameraFps = cameraFpsArg.getValue();
+		cameraWidth = cameraWidthArg.getValue();
+		cameraHeight = cameraHeightArg.getValue();
+
+	} // catch any exceptions 
+	catch (ArgException &e) {
+		cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
+		return 1;
+	}
+	return 0;
+}
+
