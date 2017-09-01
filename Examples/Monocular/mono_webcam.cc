@@ -143,7 +143,7 @@ int main(int argc, const char *argv[])
 	}
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
-	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true);
+	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, true);
 
 	// Set up the opengl AR frame
 	pangolin::View viewReal;
@@ -171,7 +171,7 @@ int main(int argc, const char *argv[])
 		if (im.empty() || im.channels() != 3) continue;
 
 		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-
+		cout << curNow << endl;
 		// Pass the image to the SLAM system
 		cameraPose = SLAM.TrackMonocular(im, curNow / 1000.0);
 		renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);

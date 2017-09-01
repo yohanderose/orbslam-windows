@@ -454,8 +454,15 @@ void Tracking::Track()
             mlpTemporalPoints.clear();
 
             // Check if we need to insert a new keyframe
-            if(NeedNewKeyFrame())
-                CreateNewKeyFrame();
+			if (NeedNewKeyFrame())
+			{
+				CreateNewKeyFrame();
+				if (mpSystem->ExportingMap)
+				{
+					cout << "Saving keyframe: " << (long long)(mCurrentFrame.mTimeStamp * 1000) << ".png" << endl;
+					cv::imwrite(to_string((long long)(mCurrentFrame.mTimeStamp * 1000)) + ".png", mImGray);
+				}
+			}
 
             // We allow points with high innovation (considererd outliers by the Huber Function)
             // pass to the new keyframe, so that bundle adjustment will finally decide
