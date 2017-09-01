@@ -28,8 +28,8 @@
 
 #include "ORBmatcher.h"
 
-#include<mutex>
-#include<thread>
+#include <mutex>
+#include <thread>
 
 
 namespace ORB_SLAM2

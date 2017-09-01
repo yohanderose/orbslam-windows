@@ -30,12 +30,14 @@
 #include <pangolin/pangolin.h>
 
 
-using namespace std;
+#define radiansToDegrees(angleRadians) (angleRadians * 180.0 / M_PI)
 
 
 int parseProgramArguments(int argc, const char *argv[]);
-void initPangolinARWindow(const string& strSettingPath, pangolin::View& viewVirtual, pangolin::View& viewReal, pangolin::OpenGlRenderState& s_cam);
-void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewVirtual, pangolin::View& viewReal, pangolin::OpenGlRenderState& s_cam, cv::Mat pose, cv::Mat camFrame);
+void initPangolinARWindow(pangolin::View& viewReal);
+void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, cv::Mat& pose, cv::Mat& camFrame);
+
+
 string vocabPath;
 string settingsPath;
 
@@ -45,32 +47,30 @@ int cameraWidth;
 int cameraHeight;
 
 
-#define radiansToDegrees(angleRadians) (angleRadians * 180.0 / M_PI)
-void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewVirtual, pangolin::View& viewReal, pangolin::OpenGlRenderState& s_cam, cv::Mat pose, cv::Mat camFrame)
+using namespace std;
+
+
+void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, cv::Mat& pose, cv::Mat& camFrame)
 {
 	if (!pangolin::ShouldQuit())
 	{
 		cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
-		cv::cvtColor(camFrame, camFrame, CV_BGR2RGB);
+		cv::cvtColor(camFrame.clone(), camFrame, CV_BGR2RGB);
+
 		pangolin::GlTexture imageTexture(camFrame.cols, camFrame.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
 		imageTexture.Upload(camFrame.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
-
-		int width = 640, height = 480;
 
 		GLfloat znear = 0.01, zfar = 20;
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glViewport(0, 0, width, height);
+		glViewport(0, 0, cameraWidth, cameraHeight);
 		glMatrixMode(GL_PROJECTION);
-
-
 
 		viewReal.Activate();
 		glDisable(GL_DEPTH_TEST);
 		glColor3f(1.0, 1.0, 1.0);
 		imageTexture.RenderToViewport(true);
 
-		//viewVirtual.Activate(s_cam);
 		if (!pose.empty())
 		{
 			float rx = atan2f(pose.at<float>(2, 1), pose.at<float>(2, 2));
@@ -87,19 +87,19 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewVir
 			cout << tx << " " << ty << " " << tz << endl << endl;
 
 			GLfloat m[4][4];
-			GLfloat fx = width, fy = width, cx = width / 2, cy = height / 2;
-			m[0][0] = 2.0 * fx / width;
+			GLfloat fx = cameraWidth, fy = cameraWidth, cx = cameraWidth / 2, cy = cameraHeight / 2;
+			m[0][0] = 2.0 * fx / cameraWidth;
 			m[0][1] = 0.0;
 			m[0][2] = 0.0;
 			m[0][3] = 0.0;
 
 			m[1][0] = 0.0;
-			m[1][1] = -2.0 * fy / height;
+			m[1][1] = -2.0 * fy / cameraHeight;
 			m[1][2] = 0.0;
 			m[1][3] = 0.0;
 
-			m[2][0] = 1.0 - 2.0 * cx / width;
-			m[2][1] = 2.0 * cy / height - 1.0;
+			m[2][0] = 1.0 - 2.0 * cx / cameraWidth;
+			m[2][1] = 2.0 * cy / cameraHeight - 1.0;
 			m[2][2] = (zfar + znear) / (znear - zfar);
 			m[2][3] = -1.0;
 
@@ -116,7 +116,6 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewVir
 			glRotated(-rxd, 1.0, 0.0, 0.0);
 
 
-			//pangolin::glDrawAxis(1000000.f);
 			glEnable(GL_DEPTH_TEST);
 			pangolin::glDrawColouredCube(-0.05f, 0.05f);
 			
@@ -130,82 +129,15 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewVir
 	}
 }
 
-void renderPangolinTestFrame(pangolin::View& d_cam, pangolin::OpenGlRenderState& s_cam, cv::Mat camFrame)
+void initPangolinARWindow(pangolin::View& viewReal)
 {
-	if (!pangolin::ShouldQuit())
-	{
-		pangolin::GlTexture imageTexture(camFrame.cols, camFrame.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
-		imageTexture.Upload(camFrame.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
-
-		// Clear screen and activate view to render into
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		d_cam.Activate();
-
-		
-
-		//display the image
-		glColor3f(1.0, 1.0, 1.0);
-		imageTexture.RenderToViewport();
-		
-		d_cam.Activate(s_cam);
-
-		// Render OpenGL Cube
-		pangolin::glDrawAxis(1.0f);
-
-		// Swap frames and Process Events
-		pangolin::FinishFrame();
-	}
-}
-
-void initPangolinARWindow(const string& strSettingPath, pangolin::View& viewVirtual, pangolin::View& viewReal, pangolin::OpenGlRenderState& s_cam)
-{
-	cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
-
 	pangolin::CreateWindowAndBind("Main", cameraWidth, cameraHeight);
 	glEnable(GL_DEPTH_TEST);
-
-	// Define Projection and initial ModelView matrix
-	s_cam = pangolin::OpenGlRenderState(
-		pangolin::ProjectionMatrix(cameraWidth, cameraHeight, fSettings["Camera.fx"], fSettings["Camera.fy"], fSettings["Camera.cx"], fSettings["Camera.cy"], 0.2, 100),
-		pangolin::ModelViewLookAt(-2, 2, -2, 0, 0, 0, pangolin::AxisY)
-	);
-
-	viewReal = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-cameraWidth / (double)cameraHeight);
-	viewVirtual = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-cameraWidth / (double)cameraHeight).SetLayout(pangolin::LayoutOverlay);
-	
+	viewReal = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-cameraWidth / (double)cameraHeight);	
 
 	return;
 }
 
-
-int main2(int argc, const char *argv[])
-{
-	// parse the command line args
-	int res = parseProgramArguments(argc, argv);
-	if (res == 1) {
-		cerr << "[Warning] -- Failed to parse command line arguments -- exiting." << endl;
-		return EXIT_FAILURE;
-	}
-
-	// Set up the opengl AR frame
-	pangolin::OpenGlRenderState s_cam;
-	pangolin::View viewReal, viewVirtual;
-	initPangolinARWindow(settingsPath, viewVirtual, viewReal, s_cam);
-
-	// Set up webcam
-	cv::VideoCapture cap(cameraIndex);
-	if (cameraFps > 0) cap.set(CV_CAP_PROP_FPS, cameraFps);
-	if (cameraWidth > 0) cap.set(CV_CAP_PROP_FRAME_WIDTH, cameraWidth);
-	if (cameraHeight > 0) cap.set(CV_CAP_PROP_FRAME_HEIGHT, cameraHeight);
-
-	cv::Mat im;
-	while (true)
-	{
-		cap >> im;
-		renderPangolinTestFrame(viewReal, s_cam, im);
-	}
-	return 0;
-}
 
 int main(int argc, const char *argv[])
 {
@@ -216,28 +148,18 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	// Create SLAM system. It initializes all system threads and gets ready to process frames.
+	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true);
+
 	// Set up the opengl AR frame
-	pangolin::OpenGlRenderState s_cam;
-	pangolin::View viewReal, viewVirtual;
-	initPangolinARWindow(settingsPath, viewVirtual, viewReal, s_cam);
+	pangolin::View viewReal;
+	initPangolinARWindow(viewReal);
 	
 	// Set up webcam
 	cv::VideoCapture cap(cameraIndex);
 	if (cameraFps > 0) cap.set(CV_CAP_PROP_FPS, cameraFps);
 	if (cameraWidth > 0) cap.set(CV_CAP_PROP_FRAME_WIDTH, cameraWidth);
 	if (cameraHeight > 0) cap.set(CV_CAP_PROP_FRAME_HEIGHT, cameraHeight);
-
-	// Test the webcam
-	cv::Mat test;
-	do
-	{
-		cap >> test;
-		imshow("Testing video - press any key to continue", test);
-	} while (cv::waitKey(1) == 255);
-	cv::destroyAllWindows();
-
-	// Create SLAM system. It initializes all system threads and gets ready to process frames.
-	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true);
 
     cout << endl << "-------" << endl;
 	cout << "Start processing sequence ..." << endl;
@@ -252,12 +174,13 @@ int main(int argc, const char *argv[])
     while (true)
     {
 		cap >> im;
+		if (im.empty() || im.channels() != 3) continue;
 
 		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
 		// Pass the image to the SLAM system
 		cameraPose = SLAM.TrackMonocular(im, curNow / 1000.0);
-		renderPangolinARFrame(settingsPath, viewVirtual, viewReal, s_cam, cameraPose, im);
+		renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
 
 		// This will make a third window with the color images, you need to click on this then press any key to quit
 		cv::imshow("Image", im);
@@ -275,7 +198,6 @@ int main(int argc, const char *argv[])
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
 
     return 0;
-	
 }
 
 int parseProgramArguments(int argc, const char *argv[])
