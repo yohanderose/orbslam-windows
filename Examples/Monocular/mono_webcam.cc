@@ -73,18 +73,15 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewRea
 
 		if (!pose.empty())
 		{
-			float rx = atan2f(pose.at<float>(2, 1), pose.at<float>(2, 2));
-			float ry = atan2f(-pose.at<float>(2, 0), sqrtf(pow(pose.at<float>(2, 1), 2) + pow(pose.at<float>(2, 2), 2)));
-			float rz = atan2f(pose.at<float>(1, 0), pose.at<float>(0, 0));
-			float rxd = radiansToDegrees(rx);
-			float ryd = radiansToDegrees(ry);
-			float rzd = radiansToDegrees(rz);
+			float rxd = radiansToDegrees(atan2f(pose.at<float>(2, 1), pose.at<float>(2, 2)));
+			float ryd = radiansToDegrees(atan2f(-pose.at<float>(2, 0), sqrtf(pow(pose.at<float>(2, 1), 2) + pow(pose.at<float>(2, 2), 2))));
+			float rzd = radiansToDegrees(atan2f(pose.at<float>(1, 0), pose.at<float>(0, 0)));
 			float tx = pose.at<float>(0, 3);
 			float ty = pose.at<float>(1, 3);
 			float tz = pose.at<float>(2, 3);
 
-			cout << rxd << " " << ryd << " " << rzd << endl;
-			cout << tx << " " << ty << " " << tz << endl << endl;
+			// cout << rxd << " " << ryd << " " << rzd << endl;
+			// cout << tx << " " << ty << " " << tz << endl << endl;
 
 			GLfloat m[4][4];
 			GLfloat fx = cameraWidth, fy = cameraWidth, cx = cameraWidth / 2, cy = cameraHeight / 2;
@@ -92,21 +89,19 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewRea
 			m[0][1] = 0.0;
 			m[0][2] = 0.0;
 			m[0][3] = 0.0;
-
 			m[1][0] = 0.0;
 			m[1][1] = -2.0 * fy / cameraHeight;
 			m[1][2] = 0.0;
 			m[1][3] = 0.0;
-
 			m[2][0] = 1.0 - 2.0 * cx / cameraWidth;
 			m[2][1] = 2.0 * cy / cameraHeight - 1.0;
 			m[2][2] = (zfar + znear) / (znear - zfar);
 			m[2][3] = -1.0;
-
 			m[3][0] = 0.0;
 			m[3][1] = 0.0;
 			m[3][2] = 2.0 * zfar * znear / (znear - zfar);
 			m[3][3] = 0.0;
+
 			glLoadIdentity();
 			glMultMatrixf((GLfloat *)m);
 
@@ -114,7 +109,6 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewRea
 			glRotated(rzd, 0.0, 0.0, 1.0);
 			glRotated(-ryd, 0.0, 1.0, 0.0);
 			glRotated(-rxd, 1.0, 0.0, 0.0);
-
 
 			glEnable(GL_DEPTH_TEST);
 			pangolin::glDrawColouredCube(-0.05f, 0.05f);
