@@ -21,6 +21,9 @@
 #ifndef KEYFRAME_H
 #define KEYFRAME_H
 
+#include <iostream>
+using namespace std;
+
 #include "MapPoint.h"
 #include "Thirdparty/DBoW2/DBoW2/BowVector.h"
 #include "Thirdparty/DBoW2/DBoW2/FeatureVector.h"
@@ -29,21 +32,36 @@
 #include "Frame.h"
 #include "KeyFrameDatabase.h"
 
+#include <boost/serialization/serialization.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/serialization/list.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/split_member.hpp>
+
 #include <mutex>
 
 
 namespace ORB_SLAM2
 {
 
+struct id_map
+{
+	bool is_valid;
+	long unsigned int id;
+};
+
 class Map;
 class MapPoint;
 class Frame;
 class KeyFrameDatabase;
 
+struct id_map;
 class KeyFrame
 {
 public:
     KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+	KeyFrame();
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
@@ -115,6 +133,13 @@ public:
     static bool lId(KeyFrame* pKF1, KeyFrame* pKF2){
         return pKF1->mnId<pKF2->mnId;
     }
+
+	void SetMap(Map* map);
+	void SetKeyFrameDatabase(KeyFrameDatabase* pKeyFrameDB);
+	void SetORBvocabulary(ORBVocabulary* pORBvocabulary);
+	void SetMapPoints(std::vector<MapPoint*> spMapPoints);
+	void SetSpanningTree(std::vector<KeyFrame*> vpKeyFrames);
+	void SetGridParams(std::vector<KeyFrame*> vpKeyFrames);
 
 
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
@@ -201,6 +226,7 @@ protected:
 
     // MapPoints associated to keypoints
     std::vector<MapPoint*> mvpMapPoints;
+	std::map<long unsigned int, id_map> mmMapPoints_nId;
 
     // BoW
     KeyFrameDatabase* mpKeyFrameDB;
@@ -210,14 +236,19 @@ protected:
     std::vector< std::vector <std::vector<size_t> > > mGrid;
 
     std::map<KeyFrame*,int> mConnectedKeyFrameWeights;
+	std::map<long unsigned int, int> mConnectedKeyFrameWeights_nId;
     std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;
+	std::map<long unsigned int, id_map> mvpOrderedConnectedKeyFrames_nId;
     std::vector<int> mvOrderedWeights;
 
     // Spanning Tree and Loop Edges
     bool mbFirstConnection;
     KeyFrame* mpParent;
+	id_map mparent_KfId_map;
     std::set<KeyFrame*> mspChildrens;
+	std::map<long unsigned int, id_map> mmChildrens_nId;
     std::set<KeyFrame*> mspLoopEdges;
+	std::map<long unsigned int, id_map> mmLoopEdges_nId;
 
     // Bad flags
     bool mbNotErase;
@@ -227,6 +258,20 @@ protected:
     float mHalfBaseline; // Only for visualization
 
     Map* mpMap;
+
+	friend class boost::serialization::access;
+	template<class Archive>
+	void serialize(Archive & ar, const unsigned int version)
+	{
+		boost::serialization::split_member(ar, *this, version);
+	}
+
+	template<class Archive>
+	void save(Archive & ar, const unsigned int version) const;
+
+
+	template<class Archive>
+	void load(Archive & ar, const unsigned int version);
 
     std::mutex mMutexPose;
     std::mutex mMutexConnections;

@@ -30,6 +30,7 @@
 #include <pangolin/pangolin.h>
 
 
+#define IMPORT_MAP 1
 #define radiansToDegrees(angleRadians) (angleRadians * 180.0 / M_PI)
 
 
@@ -143,7 +144,12 @@ int main(int argc, const char *argv[])
 	}
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
-	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, true);
+#if IMPORT_MAP == 1
+	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, false, true, "C:\\Users\\Lewis\\Desktop\\Map\\");
+#else
+	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, true, false, "C:\\Users\\Lewis\\Desktop\\Map\\");
+#endif
+
 
 	// Set up the opengl AR frame
 	pangolin::View viewReal;

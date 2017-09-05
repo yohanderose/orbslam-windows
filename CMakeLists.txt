@@ -7,14 +7,14 @@ ENDIF()
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -W0 -MT -bigobj")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W0 -MT -bigobj")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT /Z7 /bigobj")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT /Z7 /bigobj")
 
 # Check C++11 or C++0x support
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-SET(DBUILD_SHARED true)
+SET(DBUILD_STATIC true)
 
 if(COMPILER_SUPPORTS_CXX11)
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
@@ -40,6 +40,10 @@ endif()
 
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(Boost 1.54.0
+	REQUIRED
+	COMPONENTS serialization
+)
 
 include_directories(
 ${PROJECT_SOURCE_DIR}
@@ -50,7 +54,7 @@ ${Pangolin_INCLUDE_DIRS}
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
-add_library(${PROJECT_NAME} SHARED
+add_library(${PROJECT_NAME} STATIC
 src/System.cc
 src/Tracking.cc
 src/LocalMapping.cc
@@ -75,9 +79,10 @@ src/Viewer.cc
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
-${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/Release/DBoW2.lib
+${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/build/Release/g2o.lib
+${Boost_LIBRARIES}
 )
 
 # Build examples
