@@ -30,7 +30,6 @@
 #include <pangolin/pangolin.h>
 
 
-#define IMPORT_MAP 1
 #define radiansToDegrees(angleRadians) (angleRadians * 180.0 / M_PI)
 
 
@@ -46,6 +45,8 @@ int cameraIndex;
 int cameraFps;
 int cameraWidth;
 int cameraHeight;
+
+bool loadMap;
 
 
 using namespace std;
@@ -144,12 +145,21 @@ int main(int argc, const char *argv[])
 	}
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
-#if IMPORT_MAP == 1
-	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, false, true, "C:\\Users\\Lewis\\Desktop\\Map\\");
-#else
-	ORB_SLAM2::System SLAM(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, true, false, "C:\\Users\\Lewis\\Desktop\\Map\\");
-#endif
+	ORB_SLAM2::System *SLAM = NULL;
+	if (loadMap)
+	{
+		SLAM = new ORB_SLAM2::System(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, true);
+	}
+	else
+	{
+		SLAM = new ORB_SLAM2::System(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, false);
+	}
 
+	if (SLAM == NULL)
+	{
+		cout << "SLAM is NULL" << endl;
+		return EXIT_FAILURE;
+	}
 
 	// Set up the opengl AR frame
 	pangolin::View viewReal;
@@ -179,7 +189,7 @@ int main(int argc, const char *argv[])
 		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 		cout << curNow << endl;
 		// Pass the image to the SLAM system
-		cameraPose = SLAM.TrackMonocular(im, curNow / 1000.0);
+		cameraPose = SLAM->TrackMonocular(im, curNow / 1000.0);
 		renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
 
 		// This will make a third window with the color images, you need to click on this then press any key to quit
@@ -191,13 +201,14 @@ int main(int argc, const char *argv[])
     }
 
     // Stop all threads
-    SLAM.Shutdown();
+    SLAM->Shutdown();
+	if (!loadMap)
+		SLAM->SaveMap("Slam_Map.bin");
+
 	cap.release();
 
-    // Save camera trajectory
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
-
-    return 0;
+	delete SLAM;
+	return EXIT_SUCCESS;
 }
 
 int parseProgramArguments(int argc, const char *argv[])
@@ -212,6 +223,7 @@ int parseProgramArguments(int argc, const char *argv[])
 		ValueArg<int> cameraFpsArg("f", "fps", "Desired framerate of the camera", false, 0, "integer");
 		ValueArg<int> cameraWidthArg("W", "width", "Desired width of the camera", false, 0, "integer");
 		ValueArg<int> cameraHeightArg("H", "height", "Desired height of the camera", false, 0, "integer");
+		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
 
 		// add the args
 		cmd.add(vocabPathArg);
@@ -220,6 +232,7 @@ int parseProgramArguments(int argc, const char *argv[])
 		cmd.add(cameraFpsArg);
 		cmd.add(cameraWidthArg);
 		cmd.add(cameraHeightArg);
+		cmd.add(loadMapArg);
 
 		// parse the args
 		cmd.parse(argc, argv);
@@ -231,6 +244,7 @@ int parseProgramArguments(int argc, const char *argv[])
 		cameraFps = cameraFpsArg.getValue();
 		cameraWidth = cameraWidthArg.getValue();
 		cameraHeight = cameraHeightArg.getValue();
+		loadMap = loadMapArg.getValue();
 
 	} // catch any exceptions 
 	catch (ArgException &e) {

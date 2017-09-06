@@ -56,13 +56,6 @@ int main(int argc, const char *argv[])
 	// Test the webcam
 	cv::Mat test;
 	double frameCount = cap.get(CV_CAP_PROP_FRAME_COUNT);
-	/*for (int i = 0; i < frameCount; ++i)
-	{
-	cap >> test;
-	imshow("Testing video - press any key to continue", test);
-	if (cv::waitKey(1) != 255) break;
-	}
-	cv::destroyAllWindows();*/
 	cap.set(CV_CAP_PROP_POS_FRAMES, 0);
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
@@ -98,13 +91,6 @@ int main(int argc, const char *argv[])
 
 		// Pass the image to the SLAM system
 		Tcw = SLAM->TrackMonocular(im, curNow / 1000.0);
-
-		// This will make a third window with the color images, you need to click on this then press any key to quit
-		/*cv::imshow("Image", im);
-		if (cv::waitKey(1) != 255)
-		{
-		break;
-		}*/
 	}
 
 
