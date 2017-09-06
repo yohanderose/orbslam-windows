@@ -24,7 +24,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-#include <mutex>
+#include<mutex>
 
 namespace ORB_SLAM2
 {
@@ -32,8 +32,8 @@ namespace ORB_SLAM2
 FrameDrawer::FrameDrawer(Map* pMap, bool bReuse):mpMap(pMap)
 {
     mState=Tracking::SYSTEM_NOT_READY;
-	if (bReuse)
-		mState = Tracking::LOST;
+    if (bReuse)
+        mState=Tracking::LOST;
 
     mIm = cv::Mat(480,640,CV_8UC3, cv::Scalar(0,0,0));
 }

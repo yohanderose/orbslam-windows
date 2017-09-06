@@ -20,14 +20,14 @@
 
 #include "ORBmatcher.h"
 
-#include <limits.h>
+#include<limits.h>
 
-#include <opencv2/core/core.hpp>
-#include <opencv2/features2d/features2d.hpp>
+#include<opencv2/core/core.hpp>
+#include<opencv2/features2d/features2d.hpp>
 
 #include "Thirdparty/DBoW2/DBoW2/FeatureVector.h"
 
-#include <stdint.h>
+#include<stdint.h>
 
 using namespace std;
 
@@ -160,11 +160,14 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
 {
     const vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
 
+    //cout << "SearchByBoW: ref KF points size = " << vpMapPointsKF.size();
     vpMapPointMatches = vector<MapPoint*>(F.N,static_cast<MapPoint*>(NULL));
 
     const DBoW2::FeatureVector &vFeatVecKF = pKF->mFeatVec;
 
     int nmatches=0;
+
+    //cout << "SearchByBoW: CP1 nmatches =  " << nmatches << endl;
 
     vector<int> rotHist[HISTO_LENGTH];
     for(int i=0;i<HISTO_LENGTH;i++)

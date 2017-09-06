@@ -59,7 +59,6 @@ public:
 private:
 
     bool Stop();
-
 	bool mbReuse;
     System* mpSystem;
     FrameDrawer* mpFrameDrawer;

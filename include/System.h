@@ -22,10 +22,9 @@
 #ifndef SYSTEM_H
 #define SYSTEM_H
 
-
-#include <string>
-#include <thread>
-#include <opencv2/core/core.hpp>
+#include<string>
+#include<thread>
+#include<opencv2/core/core.hpp>
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/archive/binary_oarchive.hpp>
@@ -43,10 +42,7 @@
 #include "ORBVocabulary.h"
 #include "Viewer.h"
 
-
-// From http://stackoverflow.com/questions/5801813/c-usleep-is-obsolete-workarounds-for-windows-mingw
 void usleep(__int64 usec);
-
 
 namespace ORB_SLAM2
 {
@@ -69,12 +65,11 @@ public:
     };
 
 public:
-
 	// Enable serialization
 	friend class boost::serialization::access;
 
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
-	System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer = true, const bool reuse = false);
+    System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer = true, const bool reuse= false);
 
     // Proccess the given stereo frame. Images must be synchronized and rectified.
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
@@ -145,7 +140,6 @@ public:
     std::vector<MapPoint*> GetTrackedMapPoints();
     std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();
 
-
 private:
 
     // Input sensor
@@ -198,7 +192,6 @@ private:
     std::vector<MapPoint*> mTrackedMapPoints;
     std::vector<cv::KeyPoint> mTrackedKeyPointsUn;
     std::mutex mMutexState;
-
 };
 
 }// namespace ORB_SLAM
