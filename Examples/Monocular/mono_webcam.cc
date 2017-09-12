@@ -34,6 +34,9 @@
 
 
 int parseProgramArguments(int argc, const char *argv[]);
+void scaleCalib();
+void scaleIm(cv::Mat &im);
+void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
 void initPangolinARWindow(pangolin::View& viewReal);
 void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, cv::Mat& pose, cv::Mat& camFrame);
 
@@ -48,6 +51,8 @@ int cameraHeight;
 
 bool loadMap;
 
+cv::VideoCapture cap;
+
 
 using namespace std;
 
@@ -56,11 +61,12 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewRea
 {
 	if (!pangolin::ShouldQuit())
 	{
+		cv::Mat camFrameRgb;
 		cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
-		cv::cvtColor(camFrame.clone(), camFrame, CV_BGR2RGB);
+		cv::cvtColor(camFrame, camFrameRgb, CV_BGR2RGB);
 
-		pangolin::GlTexture imageTexture(camFrame.cols, camFrame.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
-		imageTexture.Upload(camFrame.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
+		pangolin::GlTexture imageTexture(camFrameRgb.cols, camFrameRgb.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
+		imageTexture.Upload(camFrameRgb.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
 
 		GLfloat znear = 0.01, zfar = 20;
 
@@ -166,10 +172,12 @@ int main(int argc, const char *argv[])
 	initPangolinARWindow(viewReal);
 	
 	// Set up webcam
-	cv::VideoCapture cap(cameraIndex);
+	cap = cv::VideoCapture(cameraIndex);
 	if (cameraFps > 0) cap.set(CV_CAP_PROP_FPS, cameraFps);
 	if (cameraWidth > 0) cap.set(CV_CAP_PROP_FRAME_WIDTH, cameraWidth);
 	if (cameraHeight > 0) cap.set(CV_CAP_PROP_FRAME_HEIGHT, cameraHeight);
+
+	scaleCalib();
 
     cout << endl << "-------" << endl;
 	cout << "Start processing sequence ..." << endl;
@@ -184,16 +192,18 @@ int main(int argc, const char *argv[])
     while (true)
     {
 		cap >> im;
+
 		if (im.empty() || im.channels() != 3) continue;
+		scaleIm(im);
 
 		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-		cout << curNow << endl;
+
 		// Pass the image to the SLAM system
 		cameraPose = SLAM->TrackMonocular(im, curNow / 1000.0);
 		renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
 
 		// This will make a third window with the color images, you need to click on this then press any key to quit
-		cv::imshow("Image", im);
+		cv::imshow("Image", im); 
 		if (cv::waitKey(1) != 255)
 		{
 			break;
@@ -254,3 +264,97 @@ int parseProgramArguments(int argc, const char *argv[])
 	return 0;
 }
 
+
+
+/* Scales the calibration data to the input video resolution */
+void scaleCalib()
+{
+	// open the original calibration
+	cv::FileStorage fsSettings(settingsPath, cv::FileStorage::READ);
+
+	// get the calibration and input resolutions
+	double calibWidth = double(fsSettings["Image.width"]);
+	double calibHeight = double(fsSettings["Image.height"]);
+	double videoWidth = cameraWidth > 0 ? cameraWidth : cap.get(CV_CAP_PROP_FRAME_WIDTH);
+	double videoHeight = cameraHeight > 0 ? cameraHeight : cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+
+	// only continue if the calibration file actually had the calibration resolution inside
+	if (calibWidth <= 0 || calibHeight <= 0)
+	{
+		cout << "Image.width and Image.height not found in calibration file, scaling is impossible." << endl;
+		return;
+	}
+
+	// calculate scaling
+	double sw = videoWidth / calibWidth;
+	double sh = videoHeight / calibHeight;
+
+	// vertical and horizontal scaling must be equal and not 1
+	if (sw == 1.0 || sw != sh)
+	{
+		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
+		return;
+	}
+	else
+	{
+		cout << "Scaling calibration file by factor: " << sw << endl;
+	}
+	// delete any traces of the previously used scaled calibration file
+	const char *tempSettingsPath = "s-calib.yaml";
+	remove(tempSettingsPath);
+
+	// copy the calibration file
+	std::ifstream src(settingsPath, std::ios::binary);
+	std::ofstream dst(tempSettingsPath, std::ios::binary);
+	dst << src.rdbuf();
+	dst.close();
+
+	// edit the new file
+	float fx = fsSettings["Camera.fx"];
+	float fy = fsSettings["Camera.fy"];
+	float cx = fsSettings["Camera.cx"];
+	float cy = fsSettings["Camera.cy"];
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fx", std::to_string(fx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fy", std::to_string(fy * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cx", std::to_string(cx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cy", std::to_string(cy * sw));
+
+	// overwrite the settings path
+	settingsPath = tempSettingsPath;
+}
+void scaleIm(cv::Mat &im)
+{
+	if (cameraWidth != im.cols && cameraWidth != -1)
+		cv::resize(im, im, cv::Size(cameraWidth, cameraHeight));
+}
+void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
+{
+	remove((filePath + ".tmp").c_str());
+
+	ifstream inFile(filePath);
+	ofstream outFile(filePath + ".tmp");
+
+	string line;
+	if (inFile.is_open())
+	{
+		if (outFile.is_open())
+		{
+			while (!inFile.eof())
+			{
+				getline(inFile, line);
+				if (line.compare(0, name.length(), name) == 0)
+				{
+					outFile << name << ": " << val << endl;
+				}
+				else
+				{
+					outFile << line << endl;
+				}
+			}
+			outFile.close();
+		}
+		inFile.close();
+	}
+	remove(filePath.c_str());
+	rename((filePath + ".tmp").c_str(), filePath.c_str());
+}

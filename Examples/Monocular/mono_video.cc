@@ -33,12 +33,20 @@ using namespace std;
 
 
 int parseProgramArguments(int argc, const char *argv[]);
+void scaleCalib();
+void scaleIm(cv::Mat &im);
+void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
 
 
 string vocabPath;
 string settingsPath;
 string filePath;
 bool loadMap;
+int rWidth;
+int rHeight;
+
+
+cv::VideoCapture cap;
 
 
 int main(int argc, const char *argv[])
@@ -51,13 +59,15 @@ int main(int argc, const char *argv[])
 	}
 
 	// Set up webcam
-	cv::VideoCapture cap(filePath);
+	cap = cv::VideoCapture(filePath);
 
 	// Test the webcam
 	cv::Mat test;
 	double frameCount = cap.get(CV_CAP_PROP_FRAME_COUNT);
 	cap.set(CV_CAP_PROP_POS_FRAMES, 0);
 
+	scaleCalib();
+	
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
 	ORB_SLAM2::System *SLAM = NULL;
 	if (loadMap)
@@ -86,11 +96,21 @@ int main(int argc, const char *argv[])
 		// Get the frame
 		cap >> im;
 
+		if (im.empty() || im.channels() != 3) continue;
+		scaleIm(im);
+
 		// Get the timestamp
 		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
 		// Pass the image to the SLAM system
 		Tcw = SLAM->TrackMonocular(im, curNow / 1000.0);
+
+		// This will make a third window with the color images, you need to click on this then press any key to quit
+		cv::imshow("Image", im);
+		if (cv::waitKey(1) != 255)
+		{
+			break;
+		}
 	}
 
 
@@ -116,12 +136,16 @@ int parseProgramArguments(int argc, const char *argv[])
 		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
 		ValueArg<string> filePathArg("f", "filePath", "Path to input video file", false, "../test.mp4", "string");
 		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
+		ValueArg<int> widthArg("W", "resizeWidth", "Width to resize the video to", false, -1, "integer");
+		ValueArg<int> heightArg("H", "resizeHeight", "Height to resize the video to", false, -1, "integer");
 
 		// add the args
 		cmd.add(vocabPathArg);
 		cmd.add(settingsPathArg);
 		cmd.add(filePathArg);
 		cmd.add(loadMapArg);
+		cmd.add(widthArg);
+		cmd.add(heightArg);
 
 		// parse the args
 		cmd.parse(argc, argv);
@@ -131,6 +155,8 @@ int parseProgramArguments(int argc, const char *argv[])
 		settingsPath = settingsPathArg.getValue();
 		filePath = filePathArg.getValue();
 		loadMap = loadMapArg.getValue();
+		rWidth = widthArg.getValue();
+		rHeight = heightArg.getValue();
 
 	} // catch any exceptions 
 	catch (ArgException &e) {
@@ -138,5 +164,100 @@ int parseProgramArguments(int argc, const char *argv[])
 		return 1;
 	}
 	return 0;
+}
+
+
+/* Scales the calibration data to the input video resolution */
+void scaleCalib()
+{
+	// open the original calibration
+	cv::FileStorage fsSettings(settingsPath, cv::FileStorage::READ);
+
+	// get the calibration and input resolutions
+	double calibWidth = double(fsSettings["Image.width"]);
+	double calibHeight = double(fsSettings["Image.height"]);
+	double videoWidth = rWidth > 0 ? rWidth : cap.get(CV_CAP_PROP_FRAME_WIDTH);
+	double videoHeight = rHeight > 0 ? rHeight : cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+
+	// only continue if the calibration file actually had the calibration resolution inside
+	if (calibWidth <= 0 || calibHeight <= 0)
+	{
+		cout << "Image.width and Image.height not found in calibration file, scaling is impossible." << endl;
+		return;
+	}
+
+	// calculate scaling
+	double sw = videoWidth / calibWidth;
+	double sh = videoHeight / calibHeight;
+
+	// vertical and horizontal scaling must be equal and not 1
+	if (sw == 1.0 || sw != sh)
+	{
+		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
+		return;
+	}
+	else
+	{
+		cout << "Scaling calibration file by factor: " << sw << endl;
+	}
+
+	// delete any traces of the previously used scaled calibration file
+	const char *tempSettingsPath = "s-calib.yaml";
+	remove(tempSettingsPath);
+
+	// copy the calibration file
+	std::ifstream src(settingsPath, std::ios::binary);
+	std::ofstream dst(tempSettingsPath, std::ios::binary);
+	dst << src.rdbuf();
+	dst.close();
+
+	// edit the new file
+	float fx = fsSettings["Camera.fx"];
+	float fy = fsSettings["Camera.fy"];
+	float cx = fsSettings["Camera.cx"];
+	float cy = fsSettings["Camera.cy"];
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fx", std::to_string(fx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fy", std::to_string(fy * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cx", std::to_string(cx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cy", std::to_string(cy * sw));
+
+	// overwrite the settings path
+	settingsPath = tempSettingsPath;
+}
+void scaleIm(cv::Mat &im)
+{
+	if (rWidth != im.cols && rWidth != -1)
+		cv::resize(im, im, cv::Size(rWidth, rHeight));
+}
+void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
+{
+	remove((filePath + ".tmp").c_str());
+
+	ifstream inFile(filePath);
+	ofstream outFile(filePath + ".tmp");
+
+	string line;
+	if (inFile.is_open())
+	{
+		if (outFile.is_open())
+		{
+			while (!inFile.eof())
+			{
+				getline(inFile, line);
+				if (line.compare(0, name.length(), name) == 0)
+				{
+					outFile << name << ": " << val << endl;
+				}
+				else
+				{
+					outFile << line << endl;
+				}
+			}
+			outFile.close();
+		}
+		inFile.close();
+	}
+	remove(filePath.c_str());
+	rename((filePath + ".tmp").c_str(), filePath.c_str());
 }
 
