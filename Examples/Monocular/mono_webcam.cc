@@ -30,15 +30,21 @@
 #include <pangolin/pangolin.h>
 
 
+using namespace std;
+using namespace cv;
+using namespace ORB_SLAM2;
+
+
 #define radiansToDegrees(angleRadians) (angleRadians * 180.0 / M_PI)
 
+vector<Point3f> worldPoints;
 
 int parseProgramArguments(int argc, const char *argv[]);
 void scaleCalib();
-void scaleIm(cv::Mat &im);
-void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
+void scaleIm(Mat &im);
+void settingsFileUpdate(string &filePath, string name, string val);
 void initPangolinARWindow(pangolin::View& viewReal);
-void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, cv::Mat& pose, cv::Mat& camFrame);
+void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, Mat& pose, Mat& camFrame);
 
 
 string vocabPath;
@@ -51,19 +57,40 @@ int cameraHeight;
 
 bool loadMap;
 
-cv::VideoCapture cap;
+VideoCapture cap;
+Mat cameraPose;
+
+System *SLAM = NULL;
 
 
-using namespace std;
+void KeyAFunction(void)
+{
+	worldPoints.clear();
 
+	if (cameraPose.empty())
+		return;
+	
+	vector<MapPoint *> mapPoints = SLAM->GetAllMapPoints();
+	for (vector<MapPoint *>::iterator mit = mapPoints.begin(); mit != mapPoints.end(); mit++)
+	{
+		if (*mit == NULL)
+			continue;
 
-void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, cv::Mat& pose, cv::Mat& camFrame)
+		Mat wp = (*mit)->GetWorldPos();
+		worldPoints.push_back(Point3f(
+			wp.at<float>(0, 0),
+			wp.at<float>(1, 0),
+			wp.at<float>(2, 0)));
+	}
+}
+
+void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, Mat& pose, Mat& camFrame)
 {
 	if (!pangolin::ShouldQuit())
 	{
-		cv::Mat camFrameRgb;
-		cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
-		cv::cvtColor(camFrame, camFrameRgb, CV_BGR2RGB);
+		Mat camFrameRgb;
+		FileStorage fSettings(strSettingPath, FileStorage::READ);
+		cvtColor(camFrame, camFrameRgb, CV_BGR2RGB);
 
 		pangolin::GlTexture imageTexture(camFrameRgb.cols, camFrameRgb.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
 		imageTexture.Upload(camFrameRgb.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
@@ -88,23 +115,27 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewRea
 			float ty = pose.at<float>(1, 3);
 			float tz = pose.at<float>(2, 3);
 
-			// cout << rxd << " " << ryd << " " << rzd << endl;
-			// cout << tx << " " << ty << " " << tz << endl << endl;
-
 			GLfloat m[4][4];
-			GLfloat fx = cameraWidth, fy = cameraWidth, cx = cameraWidth / 2, cy = cameraHeight / 2;
+			GLfloat fx = fSettings["Camera.fx"];
+			GLfloat fy = fSettings["Camera.fy"];
+			GLfloat cx = fSettings["Camera.cx"];
+			GLfloat cy = fSettings["Camera.cy"];
+
 			m[0][0] = 2.0 * fx / cameraWidth;
 			m[0][1] = 0.0;
 			m[0][2] = 0.0;
 			m[0][3] = 0.0;
+
 			m[1][0] = 0.0;
 			m[1][1] = -2.0 * fy / cameraHeight;
 			m[1][2] = 0.0;
 			m[1][3] = 0.0;
+
 			m[2][0] = 1.0 - 2.0 * cx / cameraWidth;
 			m[2][1] = 2.0 * cy / cameraHeight - 1.0;
 			m[2][2] = (zfar + znear) / (znear - zfar);
 			m[2][3] = -1.0;
+
 			m[3][0] = 0.0;
 			m[3][1] = 0.0;
 			m[3][2] = 2.0 * zfar * znear / (znear - zfar);
@@ -120,6 +151,15 @@ void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewRea
 
 			glEnable(GL_DEPTH_TEST);
 			pangolin::glDrawColouredCube(-0.05f, 0.05f);
+
+			glPointSize(10.0f);
+			for (vector<Point3f>::iterator pit = worldPoints.begin(); pit != worldPoints.end(); pit++)
+			{
+				glBegin(GL_POINTS);
+				glColor3f(1.0f, 1.0f, 1.0f);
+				glVertex3f((*pit).x, (*pit).y, -(*pit).z);
+				glEnd();
+			}
 			
 		}
 		else {
@@ -136,7 +176,7 @@ void initPangolinARWindow(pangolin::View& viewReal)
 	pangolin::CreateWindowAndBind("Main", cameraWidth, cameraHeight);
 	glEnable(GL_DEPTH_TEST);
 	viewReal = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-cameraWidth / (double)cameraHeight);	
-
+	pangolin::RegisterKeyPressCallback('a', KeyAFunction);
 	return;
 }
 
@@ -150,15 +190,22 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	// Set up webcam
+	cap = VideoCapture(cameraIndex);
+	if (cameraFps > 0) cap.set(CV_CAP_PROP_FPS, cameraFps);
+	if (cameraWidth > 0) cap.set(CV_CAP_PROP_FRAME_WIDTH, cameraWidth);
+	if (cameraHeight > 0) cap.set(CV_CAP_PROP_FRAME_HEIGHT, cameraHeight);
+
+	scaleCalib();
+
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
-	ORB_SLAM2::System *SLAM = NULL;
 	if (loadMap)
 	{
-		SLAM = new ORB_SLAM2::System(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, true);
+		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, true);
 	}
 	else
 	{
-		SLAM = new ORB_SLAM2::System(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, false);
+		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, false);
 	}
 
 	if (SLAM == NULL)
@@ -171,23 +218,14 @@ int main(int argc, const char *argv[])
 	pangolin::View viewReal;
 	initPangolinARWindow(viewReal);
 	
-	// Set up webcam
-	cap = cv::VideoCapture(cameraIndex);
-	if (cameraFps > 0) cap.set(CV_CAP_PROP_FPS, cameraFps);
-	if (cameraWidth > 0) cap.set(CV_CAP_PROP_FRAME_WIDTH, cameraWidth);
-	if (cameraHeight > 0) cap.set(CV_CAP_PROP_FRAME_HEIGHT, cameraHeight);
-
-	scaleCalib();
-
     cout << endl << "-------" << endl;
 	cout << "Start processing sequence ..." << endl;
 
 	// Main loop
-	cv::Mat im;
-	cv::Mat cameraPose;
+	Mat im;
 
 	// From http://stackoverflow.com/questions/19555121/how-to-get-current-timestamp-in-milliseconds-since-1970-just-the-way-java-gets
-	__int64 now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	__int64 now = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch()).count();
 
     while (true)
     {
@@ -196,15 +234,15 @@ int main(int argc, const char *argv[])
 		if (im.empty() || im.channels() != 3) continue;
 		scaleIm(im);
 
-		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		__int64 curNow = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch()).count();
 
 		// Pass the image to the SLAM system
 		cameraPose = SLAM->TrackMonocular(im, curNow / 1000.0);
 		renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
 
 		// This will make a third window with the color images, you need to click on this then press any key to quit
-		cv::imshow("Image", im); 
-		if (cv::waitKey(1) != 255)
+		imshow("Image", im); 
+		if (waitKey(1) != 255)
 		{
 			break;
 		}
@@ -270,7 +308,7 @@ int parseProgramArguments(int argc, const char *argv[])
 void scaleCalib()
 {
 	// open the original calibration
-	cv::FileStorage fsSettings(settingsPath, cv::FileStorage::READ);
+	FileStorage fsSettings(settingsPath, FileStorage::READ);
 
 	// get the calibration and input resolutions
 	double calibWidth = double(fsSettings["Image.width"]);
@@ -304,8 +342,8 @@ void scaleCalib()
 	remove(tempSettingsPath);
 
 	// copy the calibration file
-	std::ifstream src(settingsPath, std::ios::binary);
-	std::ofstream dst(tempSettingsPath, std::ios::binary);
+	ifstream src(settingsPath, ios::binary);
+	ofstream dst(tempSettingsPath, ios::binary);
 	dst << src.rdbuf();
 	dst.close();
 
@@ -314,20 +352,20 @@ void scaleCalib()
 	float fy = fsSettings["Camera.fy"];
 	float cx = fsSettings["Camera.cx"];
 	float cy = fsSettings["Camera.cy"];
-	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fx", std::to_string(fx * sw));
-	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fy", std::to_string(fy * sw));
-	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cx", std::to_string(cx * sw));
-	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cy", std::to_string(cy * sw));
+	settingsFileUpdate(string(tempSettingsPath), "Camera.fx", to_string(fx * sw));
+	settingsFileUpdate(string(tempSettingsPath), "Camera.fy", to_string(fy * sw));
+	settingsFileUpdate(string(tempSettingsPath), "Camera.cx", to_string(cx * sw));
+	settingsFileUpdate(string(tempSettingsPath), "Camera.cy", to_string(cy * sw));
 
 	// overwrite the settings path
 	settingsPath = tempSettingsPath;
 }
-void scaleIm(cv::Mat &im)
+void scaleIm(Mat &im)
 {
 	if (cameraWidth != im.cols && cameraWidth != -1)
-		cv::resize(im, im, cv::Size(cameraWidth, cameraHeight));
+		resize(im, im, Size(cameraWidth, cameraHeight));
 }
-void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
+void settingsFileUpdate(string &filePath, string name, string val)
 {
 	remove((filePath + ".tmp").c_str());
 

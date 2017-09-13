@@ -62,9 +62,7 @@ int main(int argc, const char *argv[])
 	cap = cv::VideoCapture(filePath);
 
 	// Test the webcam
-	cv::Mat test;
 	double frameCount = cap.get(CV_CAP_PROP_FRAME_COUNT);
-	cap.set(CV_CAP_PROP_POS_FRAMES, 0);
 
 	scaleCalib();
 	
