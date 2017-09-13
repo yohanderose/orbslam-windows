@@ -5,10 +5,12 @@ IF(NOT CMAKE_BUILD_TYPE)
   SET(CMAKE_BUILD_TYPE Release)
 ENDIF()
 
+set(CMAKE_CONFIGURATION_TYPES "Release" CACHE STRING "My multi config types" FORCE)
+
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /W0 /O2 /bigobj")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W0 /O2 /bigobj")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /W0 /MP /bigobj /Z7 /O2")
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /INCREMENTAL /DEBUG:FASTLINK")
 
 set(CompilerFlags
         CMAKE_CXX_FLAGS
@@ -40,7 +42,6 @@ else()
    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif()
 
-LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
 find_package(OpenCV 3.0 QUIET)
 if(NOT OpenCV_FOUND)
@@ -63,6 +64,9 @@ ${PROJECT_SOURCE_DIR}/include
 ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
 )
+
+# cotire for supposedly faster build
+LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
@@ -121,6 +125,11 @@ target_link_libraries(mono_webcam ${PROJECT_NAME})
 add_executable(mono_video
 Examples/Monocular/mono_video.cc)
 target_link_libraries(mono_video ${PROJECT_NAME})
+
+add_executable(mono_webcam_ar
+Examples/Monocular/ViewerAR.cc
+Examples/Monocular/mono_webcam_ar.cc)
+target_link_libraries(mono_webcam_ar ${PROJECT_NAME})
 
 # add_executable(mono_tum
 # Examples/Monocular/mono_tum.cc)
