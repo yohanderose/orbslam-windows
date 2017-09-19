@@ -27,6 +27,7 @@
 #include <System.h>
 #include <tclap/CmdLine.h>
 #include <opencv2/core/core.hpp>
+#include <opencv2/highgui.hpp>
 
 
 using namespace std;
@@ -104,11 +105,11 @@ int main(int argc, const char *argv[])
 		Tcw = SLAM->TrackMonocular(im, curNow / 1000.0);
 
 		// This will make a third window with the color images, you need to click on this then press any key to quit
-		cv::imshow("Image", im);
-		if (cv::waitKey(1) != 255)
-		{
-			break;
-		}
+		//cv::imshow("Image", im);
+		//if (cv::waitKey(1) != 255)
+		//{
+			//break;
+		//}
 	}
 
 
@@ -225,7 +226,7 @@ void scaleCalib()
 void scaleIm(cv::Mat &im)
 {
 	if (rWidth != im.cols && rWidth != -1)
-		cv::resize(im, im, cv::Size(rWidth, rHeight));
+		cv::resize(im, im, cv::Size(rWidth, rHeight), 0.0, 0.0, CV_INTER_AREA);
 }
 void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
 {

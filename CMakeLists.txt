@@ -131,6 +131,11 @@ Examples/Monocular/ViewerAR.cc
 Examples/Monocular/mono_webcam_ar.cc)
 target_link_libraries(mono_webcam_ar ${PROJECT_NAME})
 
+add_executable(rgbd_kinect2
+Examples/RGB-D/rgbd_kinect2.cc
+Examples/RGB-D/KinectRgbd.cpp)
+target_link_libraries(rgbd_kinect2 ${PROJECT_NAME})
+
 # add_executable(mono_tum
 # Examples/Monocular/mono_tum.cc)
 # target_link_libraries(mono_tum ${PROJECT_NAME})
