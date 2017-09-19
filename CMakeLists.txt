@@ -5,6 +5,9 @@ IF(NOT CMAKE_BUILD_TYPE)
   SET(CMAKE_BUILD_TYPE Release)
 ENDIF()
 
+# set the Cmake module directory
+LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/Cmake/Modules)
+
 set(CMAKE_CONFIGURATION_TYPES "Release" CACHE STRING "My multi config types" FORCE)
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
@@ -64,9 +67,6 @@ ${PROJECT_SOURCE_DIR}/include
 ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
 )
-
-# cotire for supposedly faster build
-LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
@@ -131,10 +131,15 @@ Examples/Monocular/ViewerAR.cc
 Examples/Monocular/mono_webcam_ar.cc)
 target_link_libraries(mono_webcam_ar ${PROJECT_NAME})
 
-add_executable(rgbd_kinect2
-Examples/RGB-D/rgbd_kinect2.cc
-Examples/RGB-D/KinectRgbd.cpp)
-target_link_libraries(rgbd_kinect2 ${PROJECT_NAME})
+find_package(KinectSDK2 QUIET)
+if(KinectSDK2_FOUND)
+	add_executable(rgbd_kinect2
+		Examples/RGB-D/rgbd_kinect2.cc
+		Examples/RGB-D/KinectRgbd.cpp)
+	target_include_directories(rgbd_kinect2 PRIVATE ${KinectSDK2_INCLUDE_DIRS} )
+	target_link_libraries(rgbd_kinect2 ${PROJECT_NAME})
+	target_link_libraries(rgbd_kinect2 ${KinectSDK2_LIBRARIES} )
+endif()
 
 # add_executable(mono_tum
 # Examples/Monocular/mono_tum.cc)
