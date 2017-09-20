@@ -131,6 +131,7 @@ Examples/Monocular/ViewerAR.cc
 Examples/Monocular/mono_webcam_ar.cc)
 target_link_libraries(mono_webcam_ar ${PROJECT_NAME})
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 find_package(KinectSDK2 QUIET)
 if(KinectSDK2_FOUND)
 	add_executable(rgbd_kinect2

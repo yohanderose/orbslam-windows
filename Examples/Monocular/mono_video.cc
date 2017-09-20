@@ -28,54 +28,117 @@
 #include <tclap/CmdLine.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
+#include <pangolin/pangolin.h>
+#include <pangolin/handler/handler.h>
 
 
 using namespace std;
+using namespace cv;
+using namespace ORB_SLAM2;
+using namespace pangolin;
 
 
+#define radiansToDegrees(angleRadians) (angleRadians * 180.0 / M_PI)
+
+
+/* Forward function declarations */
 int parseProgramArguments(int argc, const char *argv[]);
 void scaleCalib();
-void scaleIm(cv::Mat &im);
+void scaleIm(Mat &im);
 void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
+void initPangolinARWindow(View& viewReal);
+void renderPangolinARFrame(const string& strSettingPath, View& viewReal, Mat& pose, Mat& camFrame);
 
+/* AR display globals */
+vector<Point3f> worldPoints;
+vector<Point3f> worldPointNormals;
+bool drawNormals = false;
+bool paused = false;
+Point3f cubeLocation(0, 0, 0);
 
+/* Program arg globals */
 string vocabPath;
 string settingsPath;
 string filePath;
+int cameraIndex;
+int width;
+int height;
 bool loadMap;
-int rWidth;
-int rHeight;
+bool webcamMode;
+
+/* Misc globals */
+VideoCapture cap;
+Mat cameraPose;
+System *SLAM = NULL;
 
 
-cv::VideoCapture cap;
-
-
+/* Main */
 int main(int argc, const char *argv[])
 {
-	// parse the command line args
+	// Parse the command line args
 	int res = parseProgramArguments(argc, argv);
 	if (res == 1) {
-		cerr << "[Warning] -- Failed to parse command line arguments -- exiting." << endl;
+		cerr << "[Error] -- Failed to parse command line arguments -- exiting." << endl;
 		return EXIT_FAILURE;
 	}
 
-	// Set up webcam
-	cap = cv::VideoCapture(filePath);
-
-	// Test the webcam
-	double frameCount = cap.get(CV_CAP_PROP_FRAME_COUNT);
-
-	scaleCalib();
-	
-	// Create SLAM system. It initializes all system threads and gets ready to process frames.
-	ORB_SLAM2::System *SLAM = NULL;
-	if (loadMap)
+	// Set up video source
+	double frameCount;
+	if (webcamMode)
 	{
-		SLAM = new ORB_SLAM2::System(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, true);
+		cap = VideoCapture(cameraIndex);
+		if (!cap.isOpened())
+		{
+			cerr << "[Error] -- Failed to open camera source " << cameraIndex << " -- exiting." << endl;
+			return EXIT_FAILURE;
+		}
+
+		if (width <= 0 || height <= 0)
+		{
+			width = cap.get(CAP_PROP_FRAME_WIDTH);
+			height = cap.get(CAP_PROP_FRAME_HEIGHT);
+		}
+		else
+		{
+			bool res = true;
+			res &= cap.set(CAP_PROP_FRAME_WIDTH, width);
+			res &= cap.set(CAP_PROP_FRAME_HEIGHT, height);
+			if (!res)
+			{
+				cerr << "[Error] -- Failed to set frame resolution to " << width << "x" << height << " -- exiting." << endl;
+				return EXIT_FAILURE;
+			}
+		}
 	}
 	else
 	{
-		SLAM = new ORB_SLAM2::System(vocabPath, settingsPath, ORB_SLAM2::System::MONOCULAR, true, false);
+		cap = VideoCapture(filePath);
+		if (!cap.isOpened())
+		{
+			cerr << "[Error] -- Failed to open camera source " << cameraIndex << " -- exiting." << endl;
+			return EXIT_FAILURE;
+		}
+
+		if (width <= 0 || height <= 0)
+		{
+			width = cap.get(CAP_PROP_FRAME_WIDTH);
+			height = cap.get(CAP_PROP_FRAME_HEIGHT);
+		}
+
+		frameCount = cap.get(CV_CAP_PROP_FRAME_COUNT);
+	}
+
+	// Scale the calibration file to potentially different input resolution
+	scaleCalib();
+	
+	// Create SLAM system. It initializes all system threads and gets ready to process frames.
+	if (loadMap)
+	{
+		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, true);
+	}
+	else
+	{
+		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, false);
 	}
 
 	if (SLAM == NULL)
@@ -84,17 +147,28 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	// Set up the opengl AR frame
+	View viewReal;
+	initPangolinARWindow(viewReal);
+
 	cout << endl << "-------" << endl;
 	cout << "Start processing sequence ..." << endl;
 
 	// Main loop
-	cv::Mat im;
-	cv::Mat Tcw;
-	for (int i = 0; i < frameCount; ++i)
+	Mat im;
+	for (int i = 0; i < frameCount || webcamMode; ++i)
 	{
+		if (paused)
+		{
+			--i; // temporary hack to pause the loop and still remember which frame we are on
+			renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
+			continue;
+		}
+
 		// Get the frame
 		cap >> im;
 
+		// Check that it is all good
 		if (im.empty() || im.channels() != 3) continue;
 		scaleIm(im);
 
@@ -102,16 +176,13 @@ int main(int argc, const char *argv[])
 		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
 		// Pass the image to the SLAM system
-		Tcw = SLAM->TrackMonocular(im, curNow / 1000.0);
-
-		// This will make a third window with the color images, you need to click on this then press any key to quit
-		//cv::imshow("Image", im);
-		//if (cv::waitKey(1) != 255)
-		//{
-			//break;
-		//}
+		cameraPose = SLAM->TrackMonocular(im, curNow / 1000.0);
+		renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
 	}
 
+	// Confirm to quit
+	imshow("Press any key to quit", im);
+	waitKey();
 
 	// Stop all threads
 	SLAM->Shutdown();
@@ -124,7 +195,7 @@ int main(int argc, const char *argv[])
 	return EXIT_SUCCESS;
 }
 
-// Parses the program arguments and sets the global variables using tclap
+/* Parses the program arguments and sets the global variables using tclap */
 int parseProgramArguments(int argc, const char *argv[])
 {
 	using namespace TCLAP;
@@ -133,7 +204,8 @@ int parseProgramArguments(int argc, const char *argv[])
 		CmdLine cmd("Runs ORB_SLAM2 with a monocular video file", ' ', "0.1");
 		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.bin", "string");
 		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
-		ValueArg<string> filePathArg("f", "filePath", "Path to input video file", false, "../test.mp4", "string");
+		ValueArg<string> filePathArg("f", "filePath", "Path to input video file", false, "../test.avi", "string");
+		ValueArg<int> cameraIndexArg("c", "cameraIndex", "Index of the camera to use", false, -1, "integer");
 		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
 		ValueArg<int> widthArg("W", "resizeWidth", "Width to resize the video to", false, -1, "integer");
 		ValueArg<int> heightArg("H", "resizeHeight", "Height to resize the video to", false, -1, "integer");
@@ -142,9 +214,10 @@ int parseProgramArguments(int argc, const char *argv[])
 		cmd.add(vocabPathArg);
 		cmd.add(settingsPathArg);
 		cmd.add(filePathArg);
-		cmd.add(loadMapArg);
+		cmd.add(cameraIndexArg);
 		cmd.add(widthArg);
 		cmd.add(heightArg);
+		cmd.add(loadMapArg);
 
 		// parse the args
 		cmd.parse(argc, argv);
@@ -153,30 +226,36 @@ int parseProgramArguments(int argc, const char *argv[])
 		vocabPath = vocabPathArg.getValue();
 		settingsPath = settingsPathArg.getValue();
 		filePath = filePathArg.getValue();
+		cameraIndex = cameraIndexArg.getValue();
+		width = widthArg.getValue();
+		height = heightArg.getValue();
 		loadMap = loadMapArg.getValue();
-		rWidth = widthArg.getValue();
-		rHeight = heightArg.getValue();
+
+		// make sure that either camera index or file path is set
+		if (!cameraIndexArg.isSet() && !filePathArg.isSet())
+		{
+			return 1;
+		}
+
+		// set the mode as webcam or file -- webcam mode overrides file mode
+		webcamMode = cameraIndexArg.isSet() ? true : false;
 
 	} // catch any exceptions 
 	catch (ArgException &e) {
-		cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
 		return 1;
 	}
 	return 0;
 }
 
-
 /* Scales the calibration data to the input video resolution */
 void scaleCalib()
 {
 	// open the original calibration
-	cv::FileStorage fsSettings(settingsPath, cv::FileStorage::READ);
+	FileStorage fsSettings(settingsPath, FileStorage::READ);
 
 	// get the calibration and input resolutions
-	double calibWidth = double(fsSettings["Image.width"]);
-	double calibHeight = double(fsSettings["Image.height"]);
-	double videoWidth = rWidth > 0 ? rWidth : cap.get(CV_CAP_PROP_FRAME_WIDTH);
-	double videoHeight = rHeight > 0 ? rHeight : cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+	double calibWidth = fsSettings["Image.width"];
+	double calibHeight = fsSettings["Image.height"];
 
 	// only continue if the calibration file actually had the calibration resolution inside
 	if (calibWidth <= 0 || calibHeight <= 0)
@@ -186,11 +265,11 @@ void scaleCalib()
 	}
 
 	// calculate scaling
-	double sw = videoWidth / calibWidth;
-	double sh = videoHeight / calibHeight;
+	double sw = width / calibWidth;
+	double sh = height / calibHeight;
 
 	// vertical and horizontal scaling must be equal and not 1
-	if (sw == 1.0 || sw != sh)
+	if (width == calibWidth || sw != sh)
 	{
 		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
 		return;
@@ -223,10 +302,10 @@ void scaleCalib()
 	// overwrite the settings path
 	settingsPath = tempSettingsPath;
 }
-void scaleIm(cv::Mat &im)
+void scaleIm(Mat &im)
 {
-	if (rWidth != im.cols && rWidth != -1)
-		cv::resize(im, im, cv::Size(rWidth, rHeight), 0.0, 0.0, CV_INTER_AREA);
+	if (width != im.cols)
+		resize(im, im, Size(width, height), 0.0, 0.0, CV_INTER_AREA);
 }
 void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
 {
@@ -258,5 +337,232 @@ void settingsFileUpdate(std::string &filePath, std::string name, std::string val
 	}
 	remove(filePath.c_str());
 	rename((filePath + ".tmp").c_str(), filePath.c_str());
+}
+
+/* AR functions */
+struct MyEventHandler : public Handler
+{
+	void Mouse(View&, MouseButton button, int x, int y, bool pressed, int button_state)
+	{
+		y = height - y - 10;
+		if (!pressed)
+		{
+			std::vector<MapPoint *> vMP = SLAM->GetTrackedMapPoints();
+			int N = vMP.size();
+			vector<bool> mvbMap(N, false);
+
+			for (int i = 0; i<N; i++)
+			{
+				MapPoint* pMP = vMP[i];
+				if (pMP)
+				{
+					//if (!pTracker->mCurrentFrame.mvbOutlier[i]) // not good
+					{
+						if (pMP->Observations()>0)
+							mvbMap[i] = true;
+					}
+				}
+			}
+
+			vector<KeyPoint> kps = SLAM->GetTrackedKeyPointsUn();
+			bool found = false;
+			if (kps.size() > 0 && kps.size() == vMP.size())
+			{
+				double minDist = DBL_MAX;
+				int minIdx = INT_MAX;
+				for (int i = 0; i < kps.size(); ++i)
+				{
+					if (mvbMap[i])
+					{
+						double dist = abs(norm(kps[i].pt - Point2f(x, y)));
+						if (dist < minDist)
+						{
+							minDist = dist;
+							minIdx = i;
+							found = true;
+						}
+					}
+				}
+
+				if (found && vMP[minIdx] != NULL)
+				{
+					Mat wp = vMP[minIdx]->GetWorldPos();
+					cubeLocation = Point3f(
+						wp.at<float>(0, 0),
+						wp.at<float>(1, 0),
+						wp.at<float>(2, 0)
+					);
+
+					cout << Point2f(x, y) << " " << kps[minIdx].pt << " " << cubeLocation << endl;
+				}
+				else
+				{
+					cout << "it's null!\n";
+				}
+			}
+		}
+	}
+	void Keyboard(View&, unsigned char key, int x, int y, bool pressed)
+	{
+		if (!pressed)
+		{
+			switch (key)
+			{
+			case 'a':
+			{
+				worldPoints.clear();
+				worldPointNormals.clear();
+
+				if (cameraPose.empty())
+					return;
+
+				vector<MapPoint *> mapPoints = SLAM->GetAllMapPoints();
+
+				for (vector<MapPoint *>::iterator mit = mapPoints.begin(); mit != mapPoints.end(); mit++)
+				{
+					if (*mit == NULL)
+						continue;
+
+					Mat wp = (*mit)->GetWorldPos();
+					worldPoints.push_back(Point3f(
+						wp.at<float>(0, 0),
+						wp.at<float>(1, 0),
+						wp.at<float>(2, 0)));
+
+					Mat n = (*mit)->GetNormal() * 0.05;
+					worldPointNormals.push_back(Point3f(
+						n.at<float>(0, 0),
+						n.at<float>(1, 0),
+						n.at<float>(2, 0)));
+				}
+				break;
+			}
+			case 's':
+			{
+				worldPoints.clear();
+				worldPointNormals.clear();
+				break;
+			}
+			case 'n':
+			{
+				drawNormals = !drawNormals;
+				break;
+			}
+			case 'p':
+			{
+				paused = !paused;
+				break;
+			}
+			}
+		}
+	}
+};
+void renderPangolinARFrame(const string& strSettingPath, View& viewReal, Mat& pose, Mat& camFrame)
+{
+	if (!ShouldQuit())
+	{
+		Mat camFrameRgb;
+		FileStorage fSettings(strSettingPath, FileStorage::READ);
+		cvtColor(camFrame, camFrameRgb, CV_BGR2RGB);
+
+		GlTexture imageTexture(camFrameRgb.cols, camFrameRgb.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
+		imageTexture.Upload(camFrameRgb.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
+
+		GLfloat znear = 0.01, zfar = 20;
+
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glViewport(0, 0, width, height);
+		glMatrixMode(GL_PROJECTION);
+
+		viewReal.Activate();
+		glDisable(GL_DEPTH_TEST);
+		glColor3f(1.0, 1.0, 1.0);
+		imageTexture.RenderToViewport(true);
+
+		if (!pose.empty())
+		{
+			float rxd = radiansToDegrees(atan2f(pose.at<float>(2, 1), pose.at<float>(2, 2)));
+			float ryd = radiansToDegrees(atan2f(-pose.at<float>(2, 0), sqrtf(pow(pose.at<float>(2, 1), 2) + pow(pose.at<float>(2, 2), 2))));
+			float rzd = radiansToDegrees(atan2f(pose.at<float>(1, 0), pose.at<float>(0, 0)));
+			float tx = pose.at<float>(0, 3);
+			float ty = pose.at<float>(1, 3);
+			float tz = pose.at<float>(2, 3);
+
+			GLfloat m[4][4];
+			GLfloat fx = fSettings["Camera.fx"];
+			GLfloat fy = fSettings["Camera.fy"];
+			GLfloat cx = fSettings["Camera.cx"];
+			GLfloat cy = fSettings["Camera.cy"];
+
+			m[0][0] = 2.0 * fx / width;
+			m[0][1] = 0.0;
+			m[0][2] = 0.0;
+			m[0][3] = 0.0;
+
+			m[1][0] = 0.0;
+			m[1][1] = -2.0 * fy / height;
+			m[1][2] = 0.0;
+			m[1][3] = 0.0;
+
+			m[2][0] = 1.0 - 2.0 * cx / width;
+			m[2][1] = 2.0 * cy / height - 1.0;
+			m[2][2] = (zfar + znear) / (znear - zfar);
+			m[2][3] = -1.0;
+
+			m[3][0] = 0.0;
+			m[3][1] = 0.0;
+			m[3][2] = 2.0 * zfar * znear / (znear - zfar);
+			m[3][3] = 0.0;
+
+			glLoadIdentity();
+			glMultMatrixf((GLfloat *)m);
+
+			glTranslated(tx, ty, -tz);
+			glRotated(rzd, 0.0, 0.0, 1.0);
+			glRotated(-ryd, 0.0, 1.0, 0.0);
+			glRotated(-rxd, 1.0, 0.0, 0.0);
+
+			// set cube location
+			glTranslated(cubeLocation.x, cubeLocation.y, -cubeLocation.z);
+
+			glEnable(GL_DEPTH_TEST);
+			glDrawColouredCube(-0.005f, 0.005f);
+
+			glPointSize(5.0f);
+			for (int i = 0; i < worldPoints.size(); ++i)
+			{
+				glBegin(GL_POINTS);
+				glColor3f(1.0f, 1.0f, 1.0f);
+				glVertex3f(worldPoints[i].x, worldPoints[i].y, -worldPoints[i].z);
+				glEnd();
+
+				if (drawNormals)
+				{
+					glBegin(GL_LINES);
+					glColor3f(0.0f, 0.0f, 1.0f);
+					glVertex3f(worldPoints[i].x, worldPoints[i].y, -worldPoints[i].z);
+					glVertex3f(worldPoints[i].x + worldPointNormals[i].x, worldPoints[i].y + worldPointNormals[i].y, -worldPoints[i].z + worldPointNormals[i].z);
+					glEnd();
+				}
+			}
+
+		}
+		else {
+			glDrawAxis(1000000.f);
+		}
+
+		// Swap frames and Process Events
+		FinishFrame();
+	}
+}
+void initPangolinARWindow(View& viewReal)
+{
+	CreateWindowAndBind("Main", width, height);
+	glEnable(GL_DEPTH_TEST);
+	MyEventHandler *handler = new MyEventHandler();
+	viewReal = CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-width / (double)height).SetHandler(handler);
+	
+	
+	return;
 }
 
