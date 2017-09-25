@@ -82,6 +82,12 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	int nFaces = 8;
+	int faceIndex = 0;
+
+	char filename[1024];
+	sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%1d.image%%5d.jpg", faceIndex);
+
 	// Set up video source
 	if (webcamMode)
 	{
@@ -89,7 +95,7 @@ int main(int argc, const char *argv[])
 	}
 	else
 	{
-		cap = VideoCapture(filePath);
+		cap = VideoCapture(filename);
 	}
 
 	// Check it's good
@@ -118,7 +124,7 @@ int main(int argc, const char *argv[])
 
 	// Scale the calibration file to potentially different input resolution
 	scaleCalib();
-	
+
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
 	if (loadMap)
 	{
@@ -150,7 +156,18 @@ int main(int argc, const char *argv[])
 		cap >> im;
 
 		// Check that it is all good
-		if (im.empty() || im.channels() != 3) continue;
+		if (im.empty() || im.channels() != 3)
+		{
+			faceIndex++;
+			if (faceIndex == nFaces)
+			{
+				break;
+			}
+			sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%1d.image%%5d.jpg", faceIndex);
+			cap.release();
+			cap = VideoCapture(filename);
+			continue;
+		}
 		scaleIm(im);
 
 		// Get the timestamp
@@ -542,8 +559,8 @@ void initPangolinARWindow(View& viewReal)
 	glEnable(GL_DEPTH_TEST);
 	MyEventHandler *handler = new MyEventHandler();
 	viewReal = CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-width / (double)height).SetHandler(handler);
-	
-	
+
+
 	return;
 }
 
