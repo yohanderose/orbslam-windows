@@ -95,7 +95,7 @@ template<class Archive>
         for (std::map<KeyFrame*,size_t>::const_iterator it = mObservations.begin(); it != mObservations.end(); ++it) {        
             if (it->first == NULL)
             {
-                cout << "{INFO}Map POint Save - Empty observation " << mnId << endl;
+                //cout << "{INFO}Map POint Save - Empty observation " << mnId << endl;
 
                 is_id = false;
                 ar & is_id;
@@ -276,7 +276,7 @@ void MapPoint::SetObservations(std::vector<KeyFrame*> spKeyFrames)
     if (!found_reference)
     {
             mpRefKF = static_cast<KeyFrame*>(NULL);
-            cout << "refernce KF - " << kfRef_id << "is not found for mappoint " << mnId << endl;  
+            //cout << "refernce KF - " << kfRef_id << "is not found for mappoint " << mnId << endl;  
             // Dummy KF
             //mpRefKF = new KeyFrame();  
     }

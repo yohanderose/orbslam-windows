@@ -137,7 +137,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         }      
 
 	}
-	cout << endl << mpMap <<" : is the created map address" << endl;
+	//cout << endl << mpMap <<" : is the created map address" << endl;
 
 
     //Create Drawers. These are used by the Viewer

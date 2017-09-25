@@ -135,7 +135,7 @@ namespace ORB_SLAM2
     cout << "- Scale Factor: " << fScaleFactor << endl;
     cout << "- Initial Fast Threshold: " << fIniThFAST << endl;
     cout << "- Minimum Fast Threshold: " << fMinThFAST << endl;
-    cout << "- Reuse Map ?: " << is_preloaded << endl;
+    cout << "- Reuse Map: " << is_preloaded << endl;
     if(sensor==System::STEREO || sensor==System::RGBD)
     {
         mThDepth = mbf*(float)fSettings["ThDepth"]/fx;
@@ -626,8 +626,8 @@ void Tracking::MonocularInitialization()
 
             return;
         }
-		else
-    		cout << __FUNCTION__ << "The Key Frame-s points are less: " << mCurrentFrame.mvKeys.size() << endl;
+		//else
+    		//cout << __FUNCTION__ << "The Key Frame-s points are less: " << mCurrentFrame.mvKeys.size() << endl;
     }
     else
     {
@@ -649,7 +649,7 @@ void Tracking::MonocularInitialization()
         // Check if there are enough correspondences
         if(nmatches<100)
         {
-    		cout << __FUNCTION__ << "ORB extraction : No enough correspondesnces(<100) " << nmatches << endl;
+    		//cout << __FUNCTION__ << "ORB extraction : No enough correspondesnces(<100) " << nmatches << endl;
             delete mpInitializer;
             mpInitializer = static_cast<Initializer*>(NULL);
             return;
@@ -685,7 +685,7 @@ void Tracking::MonocularInitialization()
 void Tracking::CreateInitialMapMonocular()
 {
 
-    cout << __FUNCTION__ << ": Starting Initial Map Creation..." << endl;
+    //cout << __FUNCTION__ << ": Starting Initial Map Creation..." << endl;
     // Create KeyFrames
     KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB);
     KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
@@ -1558,7 +1558,7 @@ bool Tracking::Relocalization()
     }
     else
     {
-        cout << "Relocated" << endl;
+        //cout << "Relocated" << endl;
 
         mnLastRelocFrameId = mCurrentFrame.mnId;
         return true;

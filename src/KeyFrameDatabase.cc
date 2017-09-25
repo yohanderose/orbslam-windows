@@ -46,11 +46,11 @@ template<class Archive>
         int nItems_a, nItems_b;
         nItems_a = mvInvertedFile.size();
         ar & nItems_a;
-        cout << "{INFO}Database elmnts = %d " << nItems_a << endl;
+        //cout << "{INFO}Database elmnts = %d " << nItems_a << endl;
 
         for (vector<list<KeyFrame*>>::const_iterator it = mvInvertedFile.begin(); it != mvInvertedFile.end(); ++it) {
             nItems_b = (*it).size();
-            cout << "{INFO}kfs no elmnts = %d " << nItems_b << endl;
+            //cout << "{INFO}kfs no elmnts = %d " << nItems_b << endl;
 
             ar & nItems_b;
             for (list<KeyFrame*>::const_iterator lit = (*it).begin(); lit != (*it).end(); ++lit) {
@@ -80,12 +80,12 @@ template<class Archive>
         int j , i;
         list<KeyFrame*> temp_list;
         ar & nItems_a;
-         cout << "{INFO}Database elmnts = %d " << nItems_a << endl;
+         //cout << "{INFO}Database elmnts = %d " << nItems_a << endl;
 
         for (i = 0; i < nItems_a; ++i) {
 
             ar & nItems_b;
-            cout << "{INFO}kfs no elmnts = %d " << nItems_b << endl;
+            //cout << "{INFO}kfs no elmnts = %d " << nItems_b << endl;
 
             for (j = 0; j < nItems_b; ++j) {
                 KeyFrame* pKeyFrame = new KeyFrame;

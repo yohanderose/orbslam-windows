@@ -34,21 +34,21 @@ template<class Archive>
         unsigned int test_data = TEST_DATA;
         int nItems = mspMapPoints.size();
         ar & nItems;
-        cout << "{INFO}mspMapPoints size = " << nItems << endl;
+        //cout << "{INFO}mspMapPoints size = " << nItems << endl;
 
         std::for_each(mspMapPoints.begin(), mspMapPoints.end(), [&ar](MapPoint* pMapPoint) {
             ar & *pMapPoint;
         });
         
         nItems = mspKeyFrames.size();
-        cout << "{INFO}mspKeyFrames size = " << nItems << endl;
+        //cout << "{INFO}mspKeyFrames size = " << nItems << endl;
         ar & nItems;
         std::for_each(mspKeyFrames.begin(), mspKeyFrames.end(), [&ar](KeyFrame* pKeyFrame) {
             ar & *pKeyFrame;
         });
 
         nItems = mvpKeyFrameOrigins.size();
-        cout << "{INFO}mvpKeyFrameOrigins size = " << nItems << endl;
+        //cout << "{INFO}mvpKeyFrameOrigins size = " << nItems << endl;
         ar & nItems;
         std::for_each(mvpKeyFrameOrigins.begin(), mvpKeyFrameOrigins.end(), [&ar](KeyFrame* pKeyFrameOrigin) {
             ar & *pKeyFrameOrigin;
@@ -72,7 +72,7 @@ template<class Archive>
 
         int nItems;
         ar & nItems;
-        cout << "{INFO}mspMapPoints size = " << nItems << endl;
+        //cout << "{INFO}mspMapPoints size = " << nItems << endl;
         
         for (int i = 0; i < nItems; ++i) {
             
@@ -82,7 +82,7 @@ template<class Archive>
         }
         
         ar & nItems;
-        cout << "{INFO}mspKeyFrames size = " << nItems << endl;
+        //cout << "{INFO}mspKeyFrames size = " << nItems << endl;
 
         for (int i = 0; i < nItems; ++i) {
 
@@ -93,7 +93,7 @@ template<class Archive>
           
 
         ar & nItems;
-        cout << "{INFO}mvpKeyFrameOrigins size = " << nItems << endl;
+        //cout << "{INFO}mvpKeyFrameOrigins size = " << nItems << endl;
 
         for (int i = 0; i < nItems; ++i) {             
 
@@ -106,10 +106,10 @@ template<class Archive>
         ar & const_cast<long unsigned int &> (mnMaxKFid);
 
         ar & test_data;
-        if (test_data == TEST_DATA)
-            cout <<">>Map Loading Validated as True" << endl;
-        else
-            cout <<"ERROR Map Loading Validated as False: Got -" << test_data << " :( Check Load Save sequence" << endl;
+        //if (test_data == TEST_DATA)
+        //    cout <<">>Map Loading Validated as True" << endl;
+        //else
+        //    cout <<"ERROR Map Loading Validated as False: Got -" << test_data << " :( Check Load Save sequence" << endl;
 
     }
 
