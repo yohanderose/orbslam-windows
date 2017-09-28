@@ -503,11 +503,13 @@ void renderPangolinARFrame(const string& strSettingPath, View& viewReal, Mat& po
 			glRotated(-ryd, 0.0, 1.0, 0.0);
 			glRotated(-rxd, 1.0, 0.0, 0.0);
 
+			glPushMatrix();
 			// set cube location
 			glTranslated(cubeLocation.x, cubeLocation.y, -cubeLocation.z);
 
 			glEnable(GL_DEPTH_TEST);
 			glDrawColouredCube(-0.005f, 0.005f);
+			glPopMatrix();
 
 			glPointSize(5.0f);
 			for (int i = 0; i < worldPoints.size(); ++i)

@@ -26,8 +26,12 @@
 
 #include <System.h>
 #include <tclap/CmdLine.h>
+
 #include <opencv2/core/core.hpp>
-#include <opencv2/highgui.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/video/video.hpp>
+#include <opencv2/videoio/videoio.hpp>
+
 #include <pangolin/pangolin.h>
 #include <pangolin/handler/handler.h>
 
@@ -84,17 +88,18 @@ int main(int argc, const char *argv[])
 
 	int nFaces = 8;
 	int faceIndex = 0;
-
-	char filename[1024];
-	sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%1d.image%%5d.jpg", faceIndex);
+	char filename[512];
+	sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%d.image%%05d.jpg", faceIndex);
 
 	// Set up video source
 	if (webcamMode)
 	{
+		cout << cameraIndex << endl;
 		cap = VideoCapture(cameraIndex);
 	}
 	else
 	{
+		cout << filename << endl;
 		cap = VideoCapture(filename);
 	}
 
@@ -163,8 +168,9 @@ int main(int argc, const char *argv[])
 			{
 				break;
 			}
-			sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%1d.image%%5d.jpg", faceIndex);
+
 			cap.release();
+			sprintf_s(filename, "C:/Users/Lewis/Desktop/PhD/PhdFiles/thetas/video/er/R0010029_er.MP4.d/face%1d.image%%5d.jpg", faceIndex);
 			cap = VideoCapture(filename);
 			continue;
 		}
@@ -520,11 +526,13 @@ void renderPangolinARFrame(const string& strSettingPath, View& viewReal, Mat& po
 			glRotated(-ryd, 0.0, 1.0, 0.0);
 			glRotated(-rxd, 1.0, 0.0, 0.0);
 
+			glPushMatrix();
 			// set cube location
 			glTranslated(cubeLocation.x, cubeLocation.y, -cubeLocation.z);
 
 			glEnable(GL_DEPTH_TEST);
 			glDrawColouredCube(-0.005f, 0.005f);
+			glPopMatrix();
 
 			glPointSize(5.0f);
 			for (int i = 0; i < worldPoints.size(); ++i)
