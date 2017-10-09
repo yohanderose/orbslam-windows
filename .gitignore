@@ -325,3 +325,5 @@ __pycache__/
 
 *.dll
 *.exe
+/Scripts/CameraTrajectory.txt
+/Scripts/s-calib.yaml

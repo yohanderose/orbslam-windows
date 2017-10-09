@@ -47,9 +47,8 @@ string vocabPath;
 string settingsPath;
 
 int cameraIndex;
-int cameraFps;
-int cameraWidth;
-int cameraHeight;
+int width;
+int height;
 
 bool loadMap;
 bool bRGB;
@@ -111,10 +110,31 @@ int main(int argc, const char *argv[])
 
 	// Set up webcam
 	cap = VideoCapture(cameraIndex);
-	if (cameraFps > 0) cap.set(CV_CAP_PROP_FPS, cameraFps);
-	if (cameraWidth > 0) cap.set(CV_CAP_PROP_FRAME_WIDTH, cameraWidth);
-	if (cameraHeight > 0) cap.set(CV_CAP_PROP_FRAME_HEIGHT, cameraHeight);
+	// Check it's good
+	if (!cap.isOpened())
+	{
+		cerr << "[Error] -- Failed to open camera source -- exiting." << endl;
+		return EXIT_FAILURE;
+	}
 
+	if (width <= 0 || height <= 0) // if these values were not set in program args, we need to get them
+	{
+		width = cap.get(CAP_PROP_FRAME_WIDTH);
+		height = cap.get(CAP_PROP_FRAME_HEIGHT);
+	}
+	else // if they were set, and we are using a webcam, we can try set the webcam resolution
+	{
+		bool res = true;
+		res &= cap.set(CAP_PROP_FRAME_WIDTH, width);
+		res &= cap.set(CAP_PROP_FRAME_HEIGHT, height);
+		if (!res)
+		{
+			cerr << "[Warning] -- Failed to set webcam resolution to " << width << "x" << height << " -- exiting." << endl;
+			//return EXIT_FAILURE;
+		}
+	}
+
+	// Scale the calibration file to potentially different input resolution
 	scaleCalib();
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
@@ -170,13 +190,6 @@ int main(int argc, const char *argv[])
 			cv::cvtColor(imu, imu, CV_RGB2BGR);
 			viewerAR.SetImagePose(imu, cameraPose, state, vKeys, vMPs);
 		}
-
-		// This will make a third window with the color images, you need to click on this then press any key to quit
-		imshow("Image", im);
-		if (waitKey(1) != 255)
-		{
-			break;
-		}
 	}
 
 	// Stop all threads
@@ -199,7 +212,6 @@ int parseProgramArguments(int argc, const char *argv[])
 		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.txt", "string");
 		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
 		ValueArg<int> cameraIndexArg("c", "camIndex", "Index of the webcam to use", false, 0, "integer");
-		ValueArg<int> cameraFpsArg("f", "fps", "Desired framerate of the camera", false, 0, "integer");
 		ValueArg<int> cameraWidthArg("W", "width", "Desired width of the camera", false, 0, "integer");
 		ValueArg<int> cameraHeightArg("H", "height", "Desired height of the camera", false, 0, "integer");
 		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
@@ -208,7 +220,6 @@ int parseProgramArguments(int argc, const char *argv[])
 		cmd.add(vocabPathArg);
 		cmd.add(settingsPathArg);
 		cmd.add(cameraIndexArg);
-		cmd.add(cameraFpsArg);
 		cmd.add(cameraWidthArg);
 		cmd.add(cameraHeightArg);
 		cmd.add(loadMapArg);
@@ -220,9 +231,8 @@ int parseProgramArguments(int argc, const char *argv[])
 		vocabPath = vocabPathArg.getValue();
 		settingsPath = settingsPathArg.getValue();
 		cameraIndex = cameraIndexArg.getValue();
-		cameraFps = cameraFpsArg.getValue();
-		cameraWidth = cameraWidthArg.getValue();
-		cameraHeight = cameraHeightArg.getValue();
+		width = cameraWidthArg.getValue();
+		height = cameraHeightArg.getValue();
 		loadMap = loadMapArg.getValue();
 
 	} // catch any exceptions 
@@ -241,10 +251,8 @@ void scaleCalib()
 	FileStorage fsSettings(settingsPath, FileStorage::READ);
 
 	// get the calibration and input resolutions
-	double calibWidth = double(fsSettings["Image.width"]);
-	double calibHeight = double(fsSettings["Image.height"]);
-	double videoWidth = cameraWidth > 0 ? cameraWidth : cap.get(CV_CAP_PROP_FRAME_WIDTH);
-	double videoHeight = cameraHeight > 0 ? cameraHeight : cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+	double calibWidth = fsSettings["Image.width"];
+	double calibHeight = fsSettings["Image.height"];
 
 	// only continue if the calibration file actually had the calibration resolution inside
 	if (calibWidth <= 0 || calibHeight <= 0)
@@ -254,11 +262,11 @@ void scaleCalib()
 	}
 
 	// calculate scaling
-	double sw = videoWidth / calibWidth;
-	double sh = videoHeight / calibHeight;
+	double sw = width / calibWidth;
+	double sh = height / calibHeight;
 
 	// vertical and horizontal scaling must be equal and not 1
-	if (sw == 1.0 || sw != sh)
+	if (width == calibWidth || sw != sh)
 	{
 		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
 		return;
@@ -267,13 +275,14 @@ void scaleCalib()
 	{
 		cout << "Scaling calibration file by factor: " << sw << endl;
 	}
+
 	// delete any traces of the previously used scaled calibration file
 	const char *tempSettingsPath = "s-calib.yaml";
 	remove(tempSettingsPath);
 
 	// copy the calibration file
-	ifstream src(settingsPath, ios::binary);
-	ofstream dst(tempSettingsPath, ios::binary);
+	std::ifstream src(settingsPath, std::ios::binary);
+	std::ofstream dst(tempSettingsPath, std::ios::binary);
 	dst << src.rdbuf();
 	dst.close();
 
@@ -282,18 +291,18 @@ void scaleCalib()
 	float fy = fsSettings["Camera.fy"];
 	float cx = fsSettings["Camera.cx"];
 	float cy = fsSettings["Camera.cy"];
-	settingsFileUpdate(string(tempSettingsPath), "Camera.fx", to_string(fx * sw));
-	settingsFileUpdate(string(tempSettingsPath), "Camera.fy", to_string(fy * sw));
-	settingsFileUpdate(string(tempSettingsPath), "Camera.cx", to_string(cx * sw));
-	settingsFileUpdate(string(tempSettingsPath), "Camera.cy", to_string(cy * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fx", std::to_string(fx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fy", std::to_string(fy * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cx", std::to_string(cx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cy", std::to_string(cy * sw));
 
 	// overwrite the settings path
 	settingsPath = tempSettingsPath;
 }
 void scaleIm(Mat &im)
 {
-	if (cameraWidth != im.cols && cameraWidth != -1)
-		resize(im, im, Size(cameraWidth, cameraHeight));
+	if (width != im.cols)
+		resize(im, im, Size(width, height), 0.0, 0.0, CV_INTER_AREA);
 }
 void settingsFileUpdate(string &filePath, string name, string val)
 {

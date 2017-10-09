@@ -100,13 +100,14 @@ target_link_libraries(${PROJECT_NAME}
 	${PROJECT_SOURCE_DIR}/Thirdparty/g2o/bin/Release/g2o.lib
 )
 
-# Build projects
+# Build mono video/webcam project
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
 add_executable(mono_video
 	Examples/Monocular/mono_video.cc
 )
 target_link_libraries(mono_video ${PROJECT_NAME})
 
+# Build kinect2 project
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 find_package(KinectSDK2 QUIET)
 if(KinectSDK2_FOUND)
@@ -121,31 +122,43 @@ if(KinectSDK2_FOUND)
 	)
 endif()
 
+# Build pano project
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Panoramic)
 add_executable(pano_video
 	Examples/Panoramic/pano_video.cc
 )
 target_link_libraries(pano_video ${PROJECT_NAME})
 
-# Build AR demo
+# Build example AR demo
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
 add_executable(mono_webcam_ar
 	Examples/Monocular/ViewerAR.cc
 	Examples/Monocular/mono_webcam_ar.cc
 )
 target_link_libraries(mono_webcam_ar ${PROJECT_NAME})
 
-# Build tools
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
+# Build example mono_euroc
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
+add_executable(mono_euroc
+Examples/Monocular/mono_euroc.cc)
+target_link_libraries(mono_euroc ${PROJECT_NAME})
+
+# Build example stereo_euroc
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Stereo)
+add_executable(stereo_euroc
+Examples/Stereo/stereo_euroc.cc)
+target_link_libraries(stereo_euroc ${PROJECT_NAME})
+
+# Build Tools
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Tools)
 add_executable(bin_vocabulary
-	tools/bin_vocabulary.cc
+	Tools/bin_vocabulary.cc
 )
 target_link_libraries(bin_vocabulary ${PROJECT_NAME})
-
 
 # add_executable(mono_webcam
 # Examples/Monocular/mono_webcam.cc)
 # target_link_libraries(mono_webcam ${PROJECT_NAME})
-
 # Build examples
 # add_executable(mono_tum
 # Examples/Monocular/mono_tum.cc)
@@ -153,17 +166,10 @@ target_link_libraries(bin_vocabulary ${PROJECT_NAME})
 # add_executable(mono_kitti
 # Examples/Monocular/mono_kitti.cc)
 # target_link_libraries(mono_kitti ${PROJECT_NAME})
-# add_executable(mono_euroc
-# Examples/Monocular/mono_euroc.cc)
-# target_link_libraries(mono_euroc ${PROJECT_NAME})
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 # add_executable(rgbd_tum
 # Examples/RGB-D/rgbd_tum.cc)
 # target_link_libraries(rgbd_tum ${PROJECT_NAME})
-# set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Stereo)
 # add_executable(stereo_kitti
 # Examples/Stereo/stereo_kitti.cc)
 # target_link_libraries(stereo_kitti ${PROJECT_NAME})
-# add_executable(stereo_euroc
-# Examples/Stereo/stereo_euroc.cc)
-# target_link_libraries(stereo_euroc ${PROJECT_NAME})

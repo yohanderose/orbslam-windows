@@ -142,6 +142,8 @@ public:
 
 	std::vector<MapPoint*> GetAllMapPoints();
 
+	void ChangeCalibration(const string &strSettingPath);
+
 private:
 
     // Input sensor

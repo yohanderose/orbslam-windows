@@ -5,7 +5,7 @@
 * For more information see <https://github.com/raulmur/ORB_SLAM2>
 *
 * ORB-SLAM2 is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
+* it under the terms of the GNU General Public License as published byf
 * the Free Software Foundation, either version 3 of the License, or
 * (at your option) any later version.
 *
@@ -62,7 +62,8 @@ Point3f cubeLocation(0, 0, 0);
 
 /* Program arg globals */
 string vocabPath;
-string settingsPath;
+string settingsPrefix;
+char settingsFilename[512];
 string filePath;
 int cameraIndex;
 int width;
@@ -74,6 +75,9 @@ bool webcamMode;
 VideoCapture cap;
 Mat cameraPose;
 System *SLAM = NULL;
+
+/* Panorama stuff */
+int faceIndexOrder[] = { 4,5,6,7,0,1,2,3 };
 
 
 /* Main */
@@ -89,7 +93,7 @@ int main(int argc, const char *argv[])
 	int nFaces = 8;
 	int faceIndex = 0;
 	char filename[512];
-	sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%d.image%%05d.jpg", faceIndex);
+	sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%d.image%%05d.jpg", faceIndexOrder[faceIndex]);
 
 	// Set up video source
 	if (webcamMode)
@@ -127,17 +131,20 @@ int main(int argc, const char *argv[])
 		}
 	}
 
+	settingsFilename[512];
+	sprintf_s(settingsFilename, "%s%d.yaml", settingsPrefix.c_str(), faceIndexOrder[faceIndex]);
+
 	// Scale the calibration file to potentially different input resolution
 	scaleCalib();
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
 	if (loadMap)
 	{
-		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, true);
+		SLAM = new System(vocabPath, settingsFilename, System::MONOCULAR, true, true);
 	}
 	else
 	{
-		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, false);
+		SLAM = new System(vocabPath, settingsFilename, System::MONOCULAR, true, false);
 	}
 
 	// Set up the opengl AR frame
@@ -149,11 +156,17 @@ int main(int argc, const char *argv[])
 
 	// Main loop
 	Mat im;
+
+	// Out file stream for the path of each face of the panoramic camera
+	ofstream facePathOfs;
+	string facePathFname = "path-f" + to_string(faceIndex) + ".txt";
+	facePathOfs.open(facePathFname, ofstream::out);
 	while (true)
 	{
+		// If we are paused, keep the AR window working
 		if (paused)
 		{
-			renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
+			renderPangolinARFrame(settingsFilename, viewReal, cameraPose, im);
 			continue;
 		}
 
@@ -163,17 +176,33 @@ int main(int argc, const char *argv[])
 		// Check that it is all good
 		if (im.empty() || im.channels() != 3)
 		{
+			// increment the face number if we run out of frames, quit if we run out of facess
 			faceIndex++;
 			if (faceIndex == nFaces)
 			{
 				break;
 			}
 
+			// re-open the capture with a difference face
 			cap.release();
-			sprintf_s(filename, "C:/Users/Lewis/Desktop/PhD/PhdFiles/thetas/video/er/R0010029_er.MP4.d/face%1d.image%%5d.jpg", faceIndex);
+			sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%d.image%%05d.jpg", faceIndexOrder[faceIndex]);
 			cap = VideoCapture(filename);
+
+			// re-open the path file with a different filename
+			facePathOfs.close();
+			facePathFname = "path-f" + to_string(faceIndex) + ".txt";
+			facePathOfs.open(facePathFname, ofstream::out);
+
+			// re-load the calibration
+			settingsFilename[512];
+			sprintf_s(settingsFilename, "%s%d.yaml", settingsPrefix.c_str(), faceIndexOrder[faceIndex]);
+			scaleCalib();
+			SLAM->ChangeCalibration(settingsFilename);
+
 			continue;
 		}
+
+		// Scale the image if required
 		scaleIm(im);
 
 		// Get the timestamp
@@ -181,12 +210,22 @@ int main(int argc, const char *argv[])
 
 		// Pass the image to the SLAM system
 		cameraPose = SLAM->TrackMonocular(im, curNow / 1000.0);
-		renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
+
+		// Save the path of this face to the file
+		if (!cameraPose.empty())
+		{
+			cv::Mat Rwc = cameraPose.rowRange(0, 3).colRange(0, 3).t();
+			cv::Mat twc = -Rwc*cameraPose.rowRange(0, 3).col(3);
+			facePathOfs << twc.at<float>(0) << ";" << twc.at<float>(1) << ";" << twc.at<float>(2) << endl;
+		}
+		
+		// Render the AR window
+		renderPangolinARFrame(settingsFilename, viewReal, cameraPose, im);
 	}
 
 	// Confirm to quit
-	imshow("Press any key to quit", im);
-	waitKey();
+	//imshow("Press any key to quit", im);
+	//cv::waitKey();
 
 	// Stop all threads
 	SLAM->Shutdown();
@@ -228,7 +267,7 @@ int parseProgramArguments(int argc, const char *argv[])
 
 		// get the results
 		vocabPath = vocabPathArg.getValue();
-		settingsPath = settingsPathArg.getValue();
+		settingsPrefix = settingsPathArg.getValue();
 		filePath = filePathArg.getValue();
 		cameraIndex = cameraIndexArg.getValue();
 		width = widthArg.getValue();
@@ -255,7 +294,7 @@ int parseProgramArguments(int argc, const char *argv[])
 void scaleCalib()
 {
 	// open the original calibration
-	FileStorage fsSettings(settingsPath, FileStorage::READ);
+	FileStorage fsSettings(settingsFilename, FileStorage::READ);
 
 	// get the calibration and input resolutions
 	double calibWidth = fsSettings["Image.width"];
@@ -284,11 +323,11 @@ void scaleCalib()
 	}
 
 	// delete any traces of the previously used scaled calibration file
-	const char *tempSettingsPath = "s-calib.yaml";
+	const char tempSettingsPath[] = "s-calib.yaml";
 	remove(tempSettingsPath);
 
 	// copy the calibration file
-	std::ifstream src(settingsPath, std::ios::binary);
+	std::ifstream src(settingsFilename, std::ios::binary);
 	std::ofstream dst(tempSettingsPath, std::ios::binary);
 	dst << src.rdbuf();
 	dst.close();
@@ -304,7 +343,8 @@ void scaleCalib()
 	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cy", std::to_string(cy * sw));
 
 	// overwrite the settings path
-	settingsPath = tempSettingsPath;
+
+	sprintf(settingsFilename, "%s", tempSettingsPath);
 }
 void scaleIm(Mat &im)
 {
@@ -465,9 +505,23 @@ void renderPangolinARFrame(const string& strSettingPath, View& viewReal, Mat& po
 {
 	if (!ShouldQuit())
 	{
-		Mat camFrameRgb;
+		Mat camFrameRgb, camFrameRgbUn;
 		FileStorage fSettings(strSettingPath, FileStorage::READ);
-		cvtColor(camFrame, camFrameRgb, CV_BGR2RGB);
+		cvtColor(camFrame, camFrameRgbUn, CV_BGR2RGB);
+
+		Mat K = Mat::eye(3, 3, CV_32F);
+		K.at<float>(0, 0) = fSettings["Camera.fx"];
+		K.at<float>(1, 1) = fSettings["Camera.fy"];
+		K.at<float>(0, 2) = fSettings["Camera.cx"];
+		K.at<float>(1, 2) = fSettings["Camera.cy"];
+
+		Mat distCoeffs = Mat::zeros(5, 1, CV_32F);
+		distCoeffs.at<float>(0) = fSettings["Camera.k1"];
+		distCoeffs.at<float>(1) = fSettings["Camera.k2"];
+		distCoeffs.at<float>(2) = fSettings["Camera.p1"];
+		distCoeffs.at<float>(3) = fSettings["Camera.p2"];
+		distCoeffs.at<float>(4) = fSettings["Camera.k3"];
+		undistort(camFrameRgbUn, camFrameRgb, K, distCoeffs);
 
 		GlTexture imageTexture(camFrameRgb.cols, camFrameRgb.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
 		imageTexture.Upload(camFrameRgb.ptr(), GL_RGB, GL_UNSIGNED_BYTE);

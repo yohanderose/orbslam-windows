@@ -589,4 +589,10 @@ std::vector<MapPoint*> System::GetAllMapPoints()
 	return mpMap->GetAllMapPoints();
 }
 
+void System::ChangeCalibration(const string &strSettingPath)
+{
+	unique_lock<mutex> lock(mMutexState);
+	mpTracker->ChangeCalibration(strSettingPath);
+}
+
 } //namespace ORB_SLAM

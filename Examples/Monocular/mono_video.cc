@@ -161,10 +161,6 @@ int main(int argc, const char *argv[])
 		renderPangolinARFrame(settingsPath, viewReal, cameraPose, im);
 	}
 
-	// Confirm to quit
-	imshow("Press any key to quit", im);
-	waitKey();
-
 	// Stop all threads
 	SLAM->Shutdown();
 	if (!loadMap)
@@ -442,9 +438,23 @@ void renderPangolinARFrame(const string& strSettingPath, View& viewReal, Mat& po
 {
 	if (!ShouldQuit())
 	{
-		Mat camFrameRgb;
+		Mat camFrameRgb, camFrameRgbUn;
 		FileStorage fSettings(strSettingPath, FileStorage::READ);
-		cvtColor(camFrame, camFrameRgb, CV_BGR2RGB);
+		cvtColor(camFrame, camFrameRgbUn, CV_BGR2RGB);
+
+		Mat K = Mat::eye(3, 3, CV_32F);
+		K.at<float>(0, 0) = fSettings["Camera.fx"];
+		K.at<float>(1, 1) = fSettings["Camera.fy"];
+		K.at<float>(0, 2) = fSettings["Camera.cx"];
+		K.at<float>(1, 2) = fSettings["Camera.cy"];
+
+		Mat distCoeffs = Mat::zeros(5, 1, CV_32F);
+		distCoeffs.at<float>(0) = fSettings["Camera.k1"];
+		distCoeffs.at<float>(1) = fSettings["Camera.k2"];
+		distCoeffs.at<float>(2) = fSettings["Camera.p1"];
+		distCoeffs.at<float>(3) = fSettings["Camera.p2"];
+		distCoeffs.at<float>(4) = fSettings["Camera.k3"];
+		undistort(camFrameRgbUn, camFrameRgb, K, distCoeffs);
 
 		GlTexture imageTexture(camFrameRgb.cols, camFrameRgb.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
 		imageTexture.Upload(camFrameRgb.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
