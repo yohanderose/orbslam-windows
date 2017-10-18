@@ -29,7 +29,7 @@
 #include <opencv2/core/core.hpp>
 #include <pangolin/pangolin.h>
 
-#include "ViewerAR.h"
+#include "../Utils/ViewerAR.h"
 
 
 using namespace std;

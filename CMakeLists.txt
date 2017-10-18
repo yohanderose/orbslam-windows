@@ -104,6 +104,7 @@ target_link_libraries(${PROJECT_NAME}
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
 add_executable(mono_video
 	Examples/Monocular/mono_video.cc
+	Examples/Utils/MyARViewer.cc
 )
 target_link_libraries(mono_video ${PROJECT_NAME})
 
@@ -126,14 +127,15 @@ endif()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Panoramic)
 add_executable(pano_video
 	Examples/Panoramic/pano_video.cc
+	Examples/Utils/MyARViewer.cc
 )
 target_link_libraries(pano_video ${PROJECT_NAME})
 
 # Build example AR demo
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
 add_executable(mono_webcam_ar
-	Examples/Monocular/ViewerAR.cc
 	Examples/Monocular/mono_webcam_ar.cc
+	Examples/Utils/ViewerAR.cc
 )
 target_link_libraries(mono_webcam_ar ${PROJECT_NAME})
 
@@ -150,9 +152,9 @@ Examples/Stereo/stereo_euroc.cc)
 target_link_libraries(stereo_euroc ${PROJECT_NAME})
 
 # Build Tools
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Tools)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Utils)
 add_executable(bin_vocabulary
-	Tools/bin_vocabulary.cc
+	Examples/Utils/bin_vocabulary.cc
 )
 target_link_libraries(bin_vocabulary ${PROJECT_NAME})
 
