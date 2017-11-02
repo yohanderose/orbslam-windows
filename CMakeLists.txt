@@ -57,7 +57,7 @@ endif()
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
 find_package(Boost REQUIRED
-	COMPONENTS serialization
+	COMPONENTS serialization filesystem
 )
 
 include_directories(
@@ -150,6 +150,18 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Stereo)
 add_executable(stereo_euroc
 Examples/Stereo/stereo_euroc.cc)
 target_link_libraries(stereo_euroc ${PROJECT_NAME})
+
+# Build example stereo_webcams
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Stereo)
+add_executable(stereo_webcam
+Examples/Stereo/stereo_webcam.cc
+Examples/Utils/MyARViewer.cc
+Examples/Utils/StereoRectification.cc
+Examples/Utils/StereoSync.cc)
+target_link_libraries(stereo_webcam 
+	${PROJECT_NAME}
+	${Boost_LIBRARIES}
+)
 
 # Build Tools
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Utils)

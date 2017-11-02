@@ -41,12 +41,12 @@ using namespace ORB_SLAM2;
 int parseProgramArguments(int argc, const char *argv[]);
 void scaleCalib();
 void scaleIm(Mat &im);
-void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
+void settingsFileUpdate(string &filePath, string name, string val);
 
 /* Program arg globals */
 string vocabPath;
 string settingsPrefix;
-char settingsPath[512];
+string settingsPath;
 string filePath;
 int cameraIndex;
 int width;
@@ -60,8 +60,8 @@ Mat cameraPose;
 System *SLAM = NULL;
 
 /* Panorama stuff */
-int faceIndexOrder[] = { 4,5,6,7,0,1,2,3 };
-const bool changeCalib = false;
+int faceIndexOrder[] = { 2,3,4,5,6,7,0,1 };
+bool changeCalib = false;
 
 /* Main */
 int main(int argc, const char *argv[])
@@ -75,8 +75,7 @@ int main(int argc, const char *argv[])
 
 	int nFaces = 8;
 	int faceIndex = 0;
-	char filename[512];
-	sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%d.image%%05d.jpg", faceIndexOrder[faceIndex]);
+	string filename = "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010055_er.MP4.d\\face" + to_string(faceIndexOrder[faceIndex]) + ".image%05d.jpg";
 
 	// Set up video source
 	if (webcamMode)
@@ -114,8 +113,10 @@ int main(int argc, const char *argv[])
 		}
 	}
 
-	settingsPath[512];
-	sprintf_s(settingsPath, "%s%d.yaml", settingsPrefix.c_str(), faceIndexOrder[faceIndex]);
+	if (changeCalib)
+	{
+		settingsPath = settingsPrefix + to_string(faceIndexOrder[faceIndex]) + ".yaml";
+	}
 
 	// Scale the calibration file to potentially different input resolution
 	scaleCalib();
@@ -160,7 +161,7 @@ int main(int argc, const char *argv[])
 
 			// re-open the capture with a difference face
 			cap.release();
-			sprintf_s(filename, "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010029_er.MP4.d\\face%d.image%%05d.jpg", faceIndexOrder[faceIndex]);
+			filename = "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010055_er.MP4.d\\face" + to_string(faceIndexOrder[faceIndex]) + ".image%05d.jpg";
 			cap = VideoCapture(filename);
 
 			// re-open the path file with a different filename
@@ -171,8 +172,7 @@ int main(int argc, const char *argv[])
 			// re-load the calibration
 			if (changeCalib)
 			{
-				settingsPath[512];
-				sprintf_s(settingsPath, "%s%d.yaml", settingsPrefix.c_str(), faceIndexOrder[faceIndex]);
+				settingsPath = settingsPrefix + to_string(faceIndexOrder[faceIndex]) + ".yaml";
 				scaleCalib();
 				SLAM->ChangeCalibration(settingsPath);
 			}
@@ -184,20 +184,26 @@ int main(int argc, const char *argv[])
 		scaleIm(im);
 
 		// Get the timestamp
-		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		__int64 curNow = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch()).count();
 
 		// Pass the image to the SLAM system
 		cameraPose = SLAM->TrackMonocular(im, curNow / 1000.0);
-		viewer.renderARFrame(cameraPose, im);
+		if (viewer.renderARFrame(cameraPose, im))
+		{
+			break;
+		}
 
 		// Save the path of this face to the file
 		if (!cameraPose.empty())
 		{
-			cv::Mat Rwc = cameraPose.rowRange(0, 3).colRange(0, 3).t();
-			cv::Mat twc = -Rwc*cameraPose.rowRange(0, 3).col(3);
+			Mat Rwc = cameraPose.rowRange(0, 3).colRange(0, 3).t();
+			Mat twc = -Rwc*cameraPose.rowRange(0, 3).col(3);
 			facePathOfs << twc.at<float>(0) << ";" << twc.at<float>(1) << ";" << twc.at<float>(2) << endl;
 		}
 	}
+	Mat m = Mat::zeros(100, 100, CV_8UC1);
+	imshow("Press any key to quit", m);
+	waitKey();
 
 	// Stop all threads
 	SLAM->Shutdown();
@@ -224,6 +230,7 @@ int parseProgramArguments(int argc, const char *argv[])
 		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
 		ValueArg<int> widthArg("W", "resizeWidth", "Width to resize the video to", false, -1, "integer");
 		ValueArg<int> heightArg("H", "resizeHeight", "Height to resize the video to", false, -1, "integer");
+		SwitchArg changeCalibArg("C", "changeCalib", "Use different calibration for all 8 faces", false);
 
 		// add the args
 		cmd.add(vocabPathArg);
@@ -239,7 +246,7 @@ int parseProgramArguments(int argc, const char *argv[])
 
 		// get the results
 		vocabPath = vocabPathArg.getValue();
-		settingsPrefix = settingsPathArg.getValue();
+		changeCalib = changeCalibArg.getValue();
 		filePath = filePathArg.getValue();
 		cameraIndex = cameraIndexArg.getValue();
 		width = widthArg.getValue();
@@ -250,6 +257,16 @@ int parseProgramArguments(int argc, const char *argv[])
 		if (!cameraIndexArg.isSet() && !filePathArg.isSet())
 		{
 			return 1;
+		}
+
+		// if we are changing the calibration, then the settings path passed in is actually a prefix
+		if (changeCalib)
+		{
+			settingsPrefix = settingsPathArg.getValue();
+		}
+		else
+		{
+			settingsPath = settingsPathArg.getValue();
 		}
 
 		// set the mode as webcam or file -- webcam mode overrides file mode
@@ -299,8 +316,8 @@ void scaleCalib()
 	remove(tempSettingsPath);
 
 	// copy the calibration file
-	std::ifstream src(settingsPath, std::ios::binary);
-	std::ofstream dst(tempSettingsPath, std::ios::binary);
+	ifstream src(settingsPath, ios::binary);
+	ofstream dst(tempSettingsPath, ios::binary);
 	dst << src.rdbuf();
 	dst.close();
 
@@ -309,21 +326,20 @@ void scaleCalib()
 	float fy = fsSettings["Camera.fy"];
 	float cx = fsSettings["Camera.cx"];
 	float cy = fsSettings["Camera.cy"];
-	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fx", std::to_string(fx * sw));
-	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fy", std::to_string(fy * sw));
-	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cx", std::to_string(cx * sw));
-	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cy", std::to_string(cy * sw));
+	settingsFileUpdate(string(tempSettingsPath), "Camera.fx", to_string(fx * sw));
+	settingsFileUpdate(string(tempSettingsPath), "Camera.fy", to_string(fy * sw));
+	settingsFileUpdate(string(tempSettingsPath), "Camera.cx", to_string(cx * sw));
+	settingsFileUpdate(string(tempSettingsPath), "Camera.cy", to_string(cy * sw));
 
 	// overwrite the settings path
-
-	sprintf(settingsPath, "%s", tempSettingsPath);
+	settingsPath = tempSettingsPath;
 }
 void scaleIm(Mat &im)
 {
 	if (width != im.cols)
 		resize(im, im, Size(width, height), 0.0, 0.0, CV_INTER_AREA);
 }
-void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
+void settingsFileUpdate(string &filePath, string name, string val)
 {
 	remove((filePath + ".tmp").c_str());
 

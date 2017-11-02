@@ -4,7 +4,7 @@
 #include <vector>
 #include <string>
 
-#include <opencv2/core/core.hpp>
+#include <opencv2/core.hpp>
 #include <pangolin/pangolin.h>
 #include <pangolin/handler/handler.h>
 #include <System.h>
@@ -29,7 +29,7 @@ class MyARViewer
 				{
 					std::vector<ORB_SLAM2::MapPoint *> vMP = ctx->system->GetTrackedMapPoints();
 					int N = vMP.size();
-					vector<bool> mvbMap(N, false);
+					std::vector<bool> mvbMap(N, false);
 
 					for (int i = 0; i<N; i++)
 					{
@@ -44,7 +44,7 @@ class MyARViewer
 						}
 					}
 
-					vector<cv::KeyPoint> kps = ctx->system->GetTrackedKeyPointsUn();
+					std::vector<cv::KeyPoint> kps = ctx->system->GetTrackedKeyPointsUn();
 					bool found = false;
 					if (kps.size() > 0 && kps.size() == vMP.size())
 					{
@@ -104,9 +104,9 @@ class MyARViewer
 						if (ctx->lastCameraPose.empty())
 							return;
 
-						vector<ORB_SLAM2::MapPoint *> mapPoints = ctx->system->GetAllMapPoints();
+						std::vector<ORB_SLAM2::MapPoint *> mapPoints = ctx->system->GetAllMapPoints();
 
-						for (vector<ORB_SLAM2::MapPoint *>::iterator mit = mapPoints.begin(); mit != mapPoints.end(); mit++)
+						for (std::vector<ORB_SLAM2::MapPoint *>::iterator mit = mapPoints.begin(); mit != mapPoints.end(); mit++)
 						{
 							if (*mit == NULL)
 								continue;
@@ -213,7 +213,7 @@ private:
 
 public:
 	bool getPlaneRansac(Plane &p, std::vector<ORB_SLAM2::MapPoint *> vMP, std::vector<bool> vbMap);
-	void renderARFrame(cv::Mat cameraPose, cv::Mat im);
+	bool renderARFrame(cv::Mat cameraPose, cv::Mat im);
 
 };
 

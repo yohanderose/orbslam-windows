@@ -1,18 +1,28 @@
 #include "MyARViewer.h"
 
+#include <opencv2/core.hpp>
+#include <pangolin/pangolin.h>
+#include <pangolin/handler/handler.h>
+#include <System.h>
 
-MyARViewer::MyARViewer(ORB_SLAM2::System* system, const std::string &settingsPath, int width, int height)
+
+using namespace std;
+using namespace cv;
+using namespace pangolin;
+
+
+MyARViewer::MyARViewer(ORB_SLAM2::System* system, const string &settingsPath, int width, int height)
 	: system(system), settingsPath(settingsPath), width(width), height(height)
 {
-	pangolin::CreateWindowAndBind("MyARViewer", width, height);
+	CreateWindowAndBind("MyARViewer", width, height);
 	glEnable(GL_DEPTH_TEST);
 
 	winState.handler.SetContext(this);
-	winState.viewReal = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-width / (double)height).SetHandler(&winState.handler);
-	winState.viewCam = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-width / (double)height).SetHandler(&winState.handler);
+	winState.viewReal = CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-width / (double)height).SetHandler(&winState.handler);
+	winState.viewCam = CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-width / (double)height).SetHandler(&winState.handler);
 
-	cv::FileStorage fsSettings(settingsPath, cv::FileStorage::READ);
-	winState.cameraMatrix = pangolin::ProjectionMatrix(
+	FileStorage fsSettings(settingsPath, FileStorage::READ);
+	winState.cameraMatrix = ProjectionMatrix(
 		width,
 		height,
 		fsSettings["Camera.fx"],
@@ -22,14 +32,14 @@ MyARViewer::MyARViewer(ORB_SLAM2::System* system, const std::string &settingsPat
 		0.2,
 		100
 	);
-	winState.camState = pangolin::OpenGlRenderState(winState.cameraMatrix);
-	winState.K = cv::Mat::eye(3, 3, CV_32F);
+	winState.camState = OpenGlRenderState(winState.cameraMatrix);
+	winState.K = Mat::eye(3, 3, CV_32F);
 	winState.K.at<float>(0, 0) = fsSettings["Camera.fx"];
 	winState.K.at<float>(1, 1) = fsSettings["Camera.fy"];
 	winState.K.at<float>(0, 2) = fsSettings["Camera.cx"];
 	winState.K.at<float>(1, 2) = fsSettings["Camera.cy"];
 
-	winState.distCoeffs = cv::Mat::zeros(5, 1, CV_32F);
+	winState.distCoeffs = Mat::zeros(5, 1, CV_32F);
 	winState.distCoeffs.at<float>(0) = fsSettings["Camera.k1"];
 	winState.distCoeffs.at<float>(1) = fsSettings["Camera.k2"];
 	winState.distCoeffs.at<float>(2) = fsSettings["Camera.p1"];
@@ -41,7 +51,7 @@ MyARViewer::~MyARViewer()
 {
 }
 
-inline void selectRandomMapPoints(std::vector<ORB_SLAM2::MapPoint *>& vMPgood, ORB_SLAM2::MapPoint *randomSampleMP[3], Eigen::Vector3d randomSample[3])
+inline void selectRandomMapPoints(vector<ORB_SLAM2::MapPoint *>& vMPgood, ORB_SLAM2::MapPoint *randomSampleMP[3], Eigen::Vector3d randomSample[3])
 {
 	int r0, r1, r2;
 
@@ -49,7 +59,7 @@ inline void selectRandomMapPoints(std::vector<ORB_SLAM2::MapPoint *>& vMPgood, O
 	r1 = rand() % vMPgood.size();
 	r2 = rand() % vMPgood.size();
 
-	cv::Mat m0, m1, m2;
+	Mat m0, m1, m2;
 	m0 = vMPgood[r0]->GetWorldPos();
 	m1 = vMPgood[r1]->GetWorldPos();
 	m2 = vMPgood[r2]->GetWorldPos();
@@ -63,14 +73,14 @@ inline void selectRandomMapPoints(std::vector<ORB_SLAM2::MapPoint *>& vMPgood, O
 	randomSample[2] = Eigen::Vector3d(m2.at<float>(0, 0), m2.at<float>(1, 0), m2.at<float>(2, 0));
 }
 
-bool MyARViewer::getPlaneRansac(Plane & p, vector<ORB_SLAM2::MapPoint*> vMP, std::vector<bool> vbMap)
+bool MyARViewer::getPlaneRansac(Plane & p, vector<ORB_SLAM2::MapPoint*> vMP, vector<bool> vbMap)
 {
 	using namespace Eigen;
 
 	int N = vMP.size();
 
 	// store the "true" map points to make random sampling easier
-	std::vector<ORB_SLAM2::MapPoint *> vMPgood;
+	vector<ORB_SLAM2::MapPoint *> vMPgood;
 	for (int i = 0; i < N; ++i)
 	{
 		if (vbMap[i])
@@ -108,7 +118,7 @@ bool MyARViewer::getPlaneRansac(Plane & p, vector<ORB_SLAM2::MapPoint*> vMP, std
 		const double distThresh = 0.05;
 		for (int j = 0; j < vMPgood.size(); ++j)
 		{
-			cv::Mat pointMat = vMPgood[j]->GetWorldPos();
+			Mat pointMat = vMPgood[j]->GetWorldPos();
 			Vector3d point(pointMat.at<float>(0, 0), pointMat.at<float>(1, 0), pointMat.at<float>(2, 0));
 
 			double dist = tmp.getNormal().dot(point - tmp.getPoint());
@@ -134,19 +144,19 @@ bool MyARViewer::getPlaneRansac(Plane & p, vector<ORB_SLAM2::MapPoint*> vMP, std
 	}
 }
 
-void MyARViewer::renderARFrame(cv::Mat cameraPose, cv::Mat im)
+bool MyARViewer::renderARFrame(Mat cameraPose, Mat im)
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	if (!pangolin::ShouldQuit())
+	if (!ShouldQuit())
 	{
 		// correct the input frame
-		cv::cvtColor(im, im, CV_BGR2RGB);
-		cv::Mat camFrameUn;
-		cv::undistort(im, camFrameUn, winState.K, winState.distCoeffs);
+		cvtColor(im, im, CV_BGR2RGB);
+		Mat camFrameUn;
+		undistort(im, camFrameUn, winState.K, winState.distCoeffs);
 
 		// render the camera feed to the background
 		glDisable(GL_DEPTH_TEST);
-		pangolin::GlTexture imageTexture(camFrameUn.cols, camFrameUn.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
+		GlTexture imageTexture(camFrameUn.cols, camFrameUn.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
 		imageTexture.Upload(camFrameUn.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
 		winState.viewReal.Activate();
 		glColor3f(1.0, 1.0, 1.0);
@@ -161,18 +171,18 @@ void MyARViewer::renderARFrame(cv::Mat cameraPose, cv::Mat im)
 			winState.viewCam.Activate(winState.camState);
 
 			// Extract the pose information
-			cv::Mat Rwc = cameraPose.rowRange(0, 3).colRange(0, 3).t();
-			cv::Mat twc = -Rwc*cameraPose.rowRange(0, 3).col(3);
+			Mat Rwc = cameraPose.rowRange(0, 3).colRange(0, 3).t();
+			Mat twc = -Rwc*cameraPose.rowRange(0, 3).col(3);
 			float rx = atan2f(Rwc.at<float>(2, 1), Rwc.at<float>(2, 2));
 			float ry = atan2f(-Rwc.at<float>(2, 0), sqrtf(pow(Rwc.at<float>(2, 1), 2) + pow(Rwc.at<float>(2, 2), 2)));
 			float rz = atan2f(Rwc.at<float>(1, 0), Rwc.at<float>(0, 0));
 
 			// Transform into camera space
-			pangolin::OpenGlMatrix viewMatrix = pangolin::IdentityMatrix();
-			viewMatrix = viewMatrix * pangolin::OpenGlMatrix::RotateX(-rx);
-			viewMatrix = viewMatrix * pangolin::OpenGlMatrix::RotateY(ry);
-			viewMatrix = viewMatrix * pangolin::OpenGlMatrix::RotateZ(rz);
-			viewMatrix = viewMatrix * pangolin::OpenGlMatrix::Translate(-twc.at<float>(0), twc.at<float>(1), twc.at<float>(2));
+			OpenGlMatrix viewMatrix = IdentityMatrix();
+			viewMatrix = viewMatrix * OpenGlMatrix::RotateX(-rx);
+			viewMatrix = viewMatrix * OpenGlMatrix::RotateY(ry);
+			viewMatrix = viewMatrix * OpenGlMatrix::RotateZ(rz);
+			viewMatrix = viewMatrix * OpenGlMatrix::Translate(-twc.at<float>(0), twc.at<float>(1), twc.at<float>(2));
 			viewMatrix.Multiply();
 
 			// Draw camera space map points
@@ -190,23 +200,25 @@ void MyARViewer::renderARFrame(cv::Mat cameraPose, cv::Mat im)
 			{
 				// Transform into per-cube model space
 				glPushMatrix();
-				pangolin::OpenGlMatrix mvMatrix = pangolin::IdentityMatrix();
+				OpenGlMatrix mvMatrix = IdentityMatrix();
 				float rzz = atanf(cube.normal[0] / cube.normal[1]);
 				float rxx = atanf(cube.normal[2] / cube.normal[1]);
 				float ryy = atanf(cube.normal[0] / cube.normal[2]);
 
-				mvMatrix = mvMatrix * pangolin::OpenGlMatrix::Translate(cube.location.x, -cube.location.y + cube.scale, -cube.location.z);
-				mvMatrix = mvMatrix * pangolin::OpenGlMatrix::RotateX(rxx);
-				mvMatrix = mvMatrix * pangolin::OpenGlMatrix::RotateY(ryy);
-				mvMatrix = mvMatrix * pangolin::OpenGlMatrix::RotateZ(rzz);
+				mvMatrix = mvMatrix * OpenGlMatrix::Translate(cube.location.x, -cube.location.y + cube.scale, -cube.location.z);
+				mvMatrix = mvMatrix * OpenGlMatrix::RotateX(rxx);
+				mvMatrix = mvMatrix * OpenGlMatrix::RotateY(ryy);
+				mvMatrix = mvMatrix * OpenGlMatrix::RotateZ(rzz);
 				mvMatrix.Multiply();
-				pangolin::glDrawColouredCube(-cube.scale, cube.scale);
+				glDrawColouredCube(-cube.scale, cube.scale);
 				glPopMatrix();
 			}
 		}
 
 		// Swap frames and Process Events
-		pangolin::FinishFrame();
+		FinishFrame();
+
+		return ShouldQuit();
 	}
 }
 

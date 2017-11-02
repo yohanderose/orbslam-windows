@@ -1400,8 +1400,11 @@ bool Tracking::Relocalization()
     // Track Lost: Query KeyFrame Database for keyframe candidates for relocalisation
     vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectRelocalizationCandidates(&mCurrentFrame);
 
-    if(vpCandidateKFs.empty())
-        return false;
+	if (vpCandidateKFs.empty())
+	{
+		//cout << "FAILED RELOC 1\n";
+		return false;
+	}
 
 
     const int nKFs = vpCandidateKFs.size();
@@ -1554,11 +1557,12 @@ bool Tracking::Relocalization()
 
     if(!bMatch)
     {
+		//cout << "FAILED RELOC 2\n";
         return false;
     }
     else
     {
-        //cout << "Relocated" << endl;
+		//cout << "SUCCESS RELOC\n";
 
         mnLastRelocFrameId = mCurrentFrame.mnId;
         return true;
