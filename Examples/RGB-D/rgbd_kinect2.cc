@@ -367,15 +367,15 @@ void scaleCalib()
 	FileStorage fsSettings(settingsPath, FileStorage::READ);
 
 	// get the calibration and input resolutions
-	double calibWidth = double(fsSettings["Image.width"]);
-	double calibHeight = double(fsSettings["Image.height"]);
+	double calibWidth = double(fsSettings["Camera.width"]);
+	double calibHeight = double(fsSettings["Camera.height"]);
 	double videoWidth = cameraWidth > 0 ? cameraWidth : calibWidth;
 	double videoHeight = cameraHeight > 0 ? cameraHeight : calibHeight;
 
 	// only continue if the calibration file actually had the calibration resolution inside
 	if (calibWidth <= 0 || calibHeight <= 0)
 	{
-		cout << "Image.width and Image.height not found in calibration file, scaling is impossible." << endl;
+		cout << "Camera.width and Camera.height not found in calibration file, scaling is impossible." << endl;
 		return;
 	}
 

@@ -42,7 +42,7 @@ using namespace ORB_SLAM2;
 
 /* Forward function declarations */
 int parseProgramArguments(int argc, const char *argv[]);
-void scaleCalib();
+bool scaleCalib();
 void scaleIm(Mat &im);
 void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
 void getFrameAsync(cv::VideoCapture &cap, int idx);
@@ -54,17 +54,16 @@ string filePathLeft;
 string filePathRight;
 int cameraIndexLeft;
 int cameraIndexRight;
+int width;
+int height;
 bool loadMap;
 bool webcamMode;
 
 /* Misc globals */
-VideoCapture capLeft, capRight;
 Mat cameraPose;
-System *SLAM = NULL;
 
 /* Stereo globals */
 Mat frameLeft, frameRight;
-
 
 /* Main */
 int main(int argc, const char *argv[])
@@ -76,39 +75,46 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	// Set up video source
-	FileStorage fsSettings(settingsPath, FileStorage::READ);
-	int width = fsSettings["Camera.width"];
-	int height = fsSettings["Camera.height"];
+	System *SLAM = NULL;
 
+	FileStorage fsSettings(settingsPath, FileStorage::READ);
+	int calibWidth = fsSettings["Camera.width"];
+	int calibHeight = fsSettings["Camera.height"];
+
+	StereoSync sync;
+	VideoCapture capLeft, capRight;
 	if (webcamMode)
 	{
+		// Set up video sources
 		capLeft = VideoCapture(cameraIndexLeft);
 		capRight = VideoCapture(cameraIndexRight);
+		if (!capLeft.isOpened() || !capRight.isOpened())
+		{
+			cerr << "[Error] -- Failed to open camera sources -- exiting." << endl;
+			return EXIT_FAILURE;
+		}
+
+		capLeft.set(CAP_PROP_FRAME_WIDTH, calibWidth);
+		capLeft.set(CAP_PROP_FRAME_HEIGHT, calibHeight);
+		capRight.set(CAP_PROP_FRAME_WIDTH, calibWidth);
+		capRight.set(CAP_PROP_FRAME_HEIGHT, calibHeight);
 	}
 	else
 	{
-		//capLeft = VideoCapture(filePathLeft);
-		//capRight = VideoCapture(filePathRight);
+		// Set up stereo frame syncer
+		sync = StereoSync(filePathLeft, filePathRight);
 	}
 
-	// Check it's good
-	if (!capLeft.isOpened() || !capRight.isOpened())
+	// If we are trying to resize, try to scale the calibration file, if that works, resize rectified images as they arrive
+	bool sizeArgsSet = false;
+	if (width > 0 && height > 0)
 	{
-		//cerr << "[Error] -- Failed to open camera sources -- exiting." << endl;
-		//return EXIT_FAILURE;
+		sizeArgsSet = scaleCalib();
 	}
-
-	else if (webcamMode) // if they were set, and we are using a webcam, we can try set the webcam resolution
+	if (!sizeArgsSet)
 	{
-		//FileStorage fsSettings(settingsPath, FileStorage::READ);
-		//width = fsSettings["Camera.width"];
-		//height = fsSettings["Camera.height"];
-
-		//capLeft.set(CAP_PROP_FRAME_WIDTH, width);
-		//capRight.set(CAP_PROP_FRAME_WIDTH, width);
-		//capLeft.set(CAP_PROP_FRAME_HEIGHT, height);
-		//capRight.set(CAP_PROP_FRAME_HEIGHT, height);
+		width = calibWidth;
+		height = calibHeight;
 	}
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
@@ -127,9 +133,6 @@ int main(int argc, const char *argv[])
 	// Set up stereo rectifier
 	StereoRectification rectifier(settingsPath);
 
-	// Set up stereo frame syncer
-	StereoSync sync(filePathLeft, filePathRight);
-
 	// Main loop
 	Mat frameLeftRect, frameRightRect;
 	while (true)
@@ -137,6 +140,7 @@ int main(int argc, const char *argv[])
 		// Get the frames
 		if (webcamMode)
 		{
+			// TODO: bad idea creating new thread for each frame
 			thread leftTh = thread(getFrameAsync, capLeft, 0);
 			thread rightTh = thread(getFrameAsync, capRight, 1);
 			leftTh.join();
@@ -144,10 +148,10 @@ int main(int argc, const char *argv[])
 		}
 		else
 		{
-			string l, r;
-			sync.GetSyncedFramePaths(l, r);
-			frameLeft = imread(l, CV_LOAD_IMAGE_COLOR);
-			frameRight = imread(r, CV_LOAD_IMAGE_COLOR);
+			string lPath, rPath;
+			sync.GetSyncedFramePaths(lPath, rPath);
+			frameLeft = imread(lPath, CV_LOAD_IMAGE_COLOR);
+			frameRight = imread(rPath, CV_LOAD_IMAGE_COLOR);
 		}
 
 		// Get the timestamp
@@ -161,6 +165,17 @@ int main(int argc, const char *argv[])
 
 		// Rectify images
 		rectifier.stereoRectify(frameLeft, frameRight, frameLeftRect, frameRightRect);
+
+		// Resize them if necessary
+		if (sizeArgsSet) 
+		{
+			scaleIm(frameLeftRect);
+			scaleIm(frameRightRect);
+		}
+
+		imshow("l", frameLeftRect);
+		imshow("r", frameRightRect);
+		waitKey(1);
 
 		// Pass the image to the SLAM system
 		cameraPose = SLAM->TrackStereo(frameLeftRect, frameRightRect, curNow / 1000.0);
@@ -191,12 +206,14 @@ int parseProgramArguments(int argc, const char *argv[])
 	using namespace TCLAP;
 	try {
 		// set up the args
-		CmdLine cmd("Runs ORB_SLAM2 with a monocular video file", ' ', "0.1");
+		CmdLine cmd("Runs ORB_SLAM2 with stereo webcam or synchronized video frame directories", ' ', "0.1");
 		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.bin", "string");
 		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
-		ValueArg<string> sourceLeftArg("L", "cameraIndexLeft", "Index of the left camera to use", false, "-1", "string");
-		ValueArg<string> sourceRightArg("R", "cameraIndexRight", "Index of the right camera to use", false, "-1", "string");
+		ValueArg<string> sourceLeftArg("L", "sourceLeft", "Directory or camera-index of right camera data source", false, "-1", "string");
+		ValueArg<string> sourceRightArg("R", "sourceRight", "Directory or camera-index of right camera data source", false, "-1", "string");
 		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
+		ValueArg<int> widthArg("W", "resizeWidth", "Width to resize the video to", false, -1, "integer");
+		ValueArg<int> heightArg("H", "resizeHeight", "Height to resize the video to", false, -1, "integer");
 
 		// add the args
 		cmd.add(vocabPathArg);
@@ -204,6 +221,8 @@ int parseProgramArguments(int argc, const char *argv[])
 		cmd.add(sourceLeftArg);
 		cmd.add(sourceRightArg);
 		cmd.add(loadMapArg);
+		cmd.add(widthArg);
+		cmd.add(heightArg);
 
 		// parse the args
 		cmd.parse(argc, argv);
@@ -214,6 +233,8 @@ int parseProgramArguments(int argc, const char *argv[])
 		filePathRight = sourceRightArg.getValue();
 		filePathLeft = sourceLeftArg.getValue();
 		loadMap = loadMapArg.getValue();
+		width = widthArg.getValue();
+		height = heightArg.getValue();
 
 		if (is_number(filePathLeft) && is_number(filePathRight))
 		{
@@ -243,5 +264,100 @@ void getFrameAsync(cv::VideoCapture &cap, int idx)
 	{
 		cap >> frameRight;
 	}
+}
+
+/* Scales the calibration data to the input video resolution */
+bool scaleCalib()
+{
+	// open the original calibration
+	FileStorage fsSettings(settingsPath, FileStorage::READ);
+
+	// get the calibration and input resolutions
+	double calibWidth = fsSettings["Camera.width"];
+	double calibHeight = fsSettings["Camera.height"];
+
+	// only continue if the calibration file actually had the calibration resolution inside
+	if (calibWidth <= 0 || calibHeight <= 0)
+	{
+		cout << "Camera.width and Camera.height not found in calibration file, scaling is impossible." << endl;
+		return false;
+	}
+
+	// calculate scaling
+	double sw = width / calibWidth;
+	double sh = height / calibHeight;
+
+	// vertical and horizontal scaling must be equal and not 1
+	if (width == calibWidth || sw != sh)
+	{
+		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
+		return false;
+	}
+	else
+	{
+		cout << "Scaling calibration file by factor: " << sw << endl;
+	}
+
+	// delete any traces of the previously used scaled calibration file
+	const char *tempSettingsPath = "s-calib.yaml";
+	remove(tempSettingsPath);
+
+	// copy the calibration file
+	std::ifstream src(settingsPath, std::ios::binary);
+	std::ofstream dst(tempSettingsPath, std::ios::binary);
+	dst << src.rdbuf();
+	dst.close();
+
+	// edit the new file
+	float fx = fsSettings["Camera.fx"];
+	float fy = fsSettings["Camera.fy"];
+	float cx = fsSettings["Camera.cx"];
+	float cy = fsSettings["Camera.cy"];
+	float bf = fsSettings["Camera.bf"];
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fx", std::to_string(fx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fy", std::to_string(fy * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cx", std::to_string(cx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cy", std::to_string(cy * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.bf", std::to_string((bf / fx) * (sw * fx)));
+
+	// overwrite the settings path
+	settingsPath = tempSettingsPath;
+	return true;
+}
+void scaleIm(Mat &im)
+{
+	if (width != im.cols || height != im.rows)
+		resize(im, im, Size(width, height), 0.0, 0.0, CV_INTER_AREA);
+}
+void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
+{
+	remove((filePath + ".tmp").c_str());
+
+	ifstream inFile(filePath);
+	ofstream outFile(filePath + ".tmp");
+
+	string line;
+	if (inFile.is_open())
+	{
+		if (outFile.is_open())
+		{
+			while (!inFile.eof())
+			{
+				getline(inFile, line);
+				if (line.compare(0, name.length(), name) == 0)
+				{
+					outFile << name << ": " << val << endl;
+				}
+				else
+				{
+					outFile << line << endl;
+				}
+			}
+			outFile.close();
+		}
+		inFile.close();
+	}
+	remove(filePath.c_str());
+	rename((filePath + ".tmp").c_str(), filePath.c_str());
 }
 

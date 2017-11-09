@@ -38,7 +38,7 @@ using namespace ORB_SLAM2;
 
 
 int parseProgramArguments(int argc, const char *argv[]);
-void scaleCalib();
+bool scaleCalib();
 void scaleIm(Mat &im);
 void settingsFileUpdate(string &filePath, string name, string val);
 
@@ -108,6 +108,10 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	FileStorage fsSettings(settingsPath, FileStorage::READ);
+	int calibWidth = fsSettings["Camera.width"];
+	int calibHeight = fsSettings["Camera.height"];
+
 	// Set up webcam
 	cap = VideoCapture(cameraIndex);
 	// Check it's good
@@ -117,25 +121,17 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	if (width <= 0 || height <= 0) // if these values were not set in program args, we need to get them
+	// If we are trying to resize, try to scale the calibration file, if that works, resize rectified images as they arrive
+	bool sizeArgsSet = false;
+	if (width > 0 && height > 0)
 	{
-		width = cap.get(CAP_PROP_FRAME_WIDTH);
-		height = cap.get(CAP_PROP_FRAME_HEIGHT);
+		sizeArgsSet = scaleCalib();
 	}
-	else // if they were set, and we are using a webcam, we can try set the webcam resolution
+	if (!sizeArgsSet)
 	{
-		bool res = true;
-		res &= cap.set(CAP_PROP_FRAME_WIDTH, width);
-		res &= cap.set(CAP_PROP_FRAME_HEIGHT, height);
-		if (!res)
-		{
-			cerr << "[Warning] -- Failed to set webcam resolution to " << width << "x" << height << " -- exiting." << endl;
-			//return EXIT_FAILURE;
-		}
+		width = calibWidth;
+		height = calibHeight;
 	}
-
-	// Scale the calibration file to potentially different input resolution
-	scaleCalib();
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
 	if (loadMap)
@@ -170,7 +166,12 @@ int main(int argc, const char *argv[])
 		cap >> im;
 
 		if (im.empty() || im.channels() != 3) continue;
-		scaleIm(im);
+
+		// Resize im if necessary
+		if (sizeArgsSet)
+		{
+			scaleIm(im);
+		}
 
 		__int64 curNow = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch()).count();
 
@@ -208,7 +209,7 @@ int parseProgramArguments(int argc, const char *argv[])
 	using namespace TCLAP;
 	try {
 		// set up the args
-		CmdLine cmd("Runs ORB_SLAM2 with a monocular webcam", ' ', "0.1");
+		CmdLine cmd("Runs ORB_SLAM2 AR demo with a monocular webcam", ' ', "0.1");
 		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.txt", "string");
 		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
 		ValueArg<int> cameraIndexArg("c", "camIndex", "Index of the webcam to use", false, 0, "integer");
@@ -245,20 +246,20 @@ int parseProgramArguments(int argc, const char *argv[])
 
 
 /* Scales the calibration data to the input video resolution */
-void scaleCalib()
+bool scaleCalib()
 {
 	// open the original calibration
 	FileStorage fsSettings(settingsPath, FileStorage::READ);
 
 	// get the calibration and input resolutions
-	double calibWidth = fsSettings["Image.width"];
-	double calibHeight = fsSettings["Image.height"];
+	double calibWidth = fsSettings["Camera.width"];
+	double calibHeight = fsSettings["Camera.height"];
 
 	// only continue if the calibration file actually had the calibration resolution inside
 	if (calibWidth <= 0 || calibHeight <= 0)
 	{
-		cout << "Image.width and Image.height not found in calibration file, scaling is impossible." << endl;
-		return;
+		cout << "Camera.width and Camera.height not found in calibration file, scaling is impossible." << endl;
+		return false;
 	}
 
 	// calculate scaling
@@ -269,7 +270,7 @@ void scaleCalib()
 	if (width == calibWidth || sw != sh)
 	{
 		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
-		return;
+		return false;
 	}
 	else
 	{
@@ -298,10 +299,11 @@ void scaleCalib()
 
 	// overwrite the settings path
 	settingsPath = tempSettingsPath;
+	return true;
 }
 void scaleIm(Mat &im)
 {
-	if (width != im.cols)
+	if (width != im.cols || height != im.rows)
 		resize(im, im, Size(width, height), 0.0, 0.0, CV_INTER_AREA);
 }
 void settingsFileUpdate(string &filePath, string name, string val)

@@ -32,6 +32,11 @@ vector<path> GetFilesInDirectory(string dir)
 	}
 }
 
+StereoSync::StereoSync()
+{
+
+}
+
 StereoSync::StereoSync(string leftDir, string rightDir)
 {
 	idx = 0;

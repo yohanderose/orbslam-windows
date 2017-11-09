@@ -7,6 +7,7 @@
 class StereoSync
 {
 public:
+	StereoSync();
 	StereoSync(std::string leftDir, std::string rightDir);
 
 private:

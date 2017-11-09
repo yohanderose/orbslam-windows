@@ -39,7 +39,7 @@ using namespace ORB_SLAM2;
 
 /* Forward function declarations */
 int parseProgramArguments(int argc, const char *argv[]);
-void scaleCalib();
+bool scaleCalib();
 void scaleIm(Mat &im);
 void settingsFileUpdate(string &filePath, string name, string val);
 
@@ -280,20 +280,20 @@ int parseProgramArguments(int argc, const char *argv[])
 }
 
 /* Scales the calibration data to the input video resolution */
-void scaleCalib()
+bool scaleCalib()
 {
 	// open the original calibration
 	FileStorage fsSettings(settingsPath, FileStorage::READ);
 
 	// get the calibration and input resolutions
-	double calibWidth = fsSettings["Image.width"];
-	double calibHeight = fsSettings["Image.height"];
+	double calibWidth = fsSettings["Camera.width"];
+	double calibHeight = fsSettings["Camera.height"];
 
 	// only continue if the calibration file actually had the calibration resolution inside
 	if (calibWidth <= 0 || calibHeight <= 0)
 	{
-		cout << "Image.width and Image.height not found in calibration file, scaling is impossible." << endl;
-		return;
+		cout << "Camera.width and Camera.height not found in calibration file, scaling is impossible." << endl;
+		return false;
 	}
 
 	// calculate scaling
@@ -304,7 +304,7 @@ void scaleCalib()
 	if (width == calibWidth || sw != sh)
 	{
 		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
-		return;
+		return false;
 	}
 	else
 	{
@@ -333,10 +333,11 @@ void scaleCalib()
 
 	// overwrite the settings path
 	settingsPath = tempSettingsPath;
+	return true;
 }
 void scaleIm(Mat &im)
 {
-	if (width != im.cols)
+	if (width != im.cols || height != im.rows)
 		resize(im, im, Size(width, height), 0.0, 0.0, CV_INTER_AREA);
 }
 void settingsFileUpdate(string &filePath, string name, string val)

@@ -39,7 +39,7 @@ using namespace ORB_SLAM2;
 
 /* Forward function declarations */
 int parseProgramArguments(int argc, const char *argv[]);
-void scaleCalib();
+bool scaleCalib();
 void scaleIm(Mat &im);
 void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
 
@@ -54,9 +54,7 @@ bool loadMap;
 bool webcamMode;
 
 /* Misc globals */
-VideoCapture cap;
 Mat cameraPose;
-System *SLAM = NULL;
 
 /* Main */
 int main(int argc, const char *argv[])
@@ -68,42 +66,43 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	System *SLAM = NULL;
+
+	FileStorage fsSettings(settingsPath, FileStorage::READ);
+	int calibWidth = fsSettings["Camera.width"];
+	int calibHeight = fsSettings["Camera.height"];
+
+	VideoCapture cap;
+
 	// Set up video source
 	if (webcamMode)
 	{
-		cap = VideoCapture(cameraIndex);
+		cap = VideoCapture(cameraIndex); 
 	}
 	else
 	{
 		cap = VideoCapture(filePath);
 	}
 
-	// Check it's good
 	if (!cap.isOpened())
 	{
 		cerr << "[Error] -- Failed to open camera source -- exiting." << endl;
 		return EXIT_FAILURE;
 	}
-
-	if (width <= 0 || height <= 0) // if these values were not set in program args, we need to get them
+	cap.set(CAP_PROP_FRAME_WIDTH, calibWidth);
+	cap.set(CAP_PROP_FRAME_HEIGHT, calibHeight);
+	
+	// If we are trying to resize, try to scale the calibration file, if that works, resize rectified images as they arrive
+	bool sizeArgsSet = false;
+	if (width > 0 && height > 0)
 	{
-		width = cap.get(CAP_PROP_FRAME_WIDTH);
-		height = cap.get(CAP_PROP_FRAME_HEIGHT);
+		sizeArgsSet = scaleCalib();
 	}
-	else if (webcamMode) // if they were set, and we are using a webcam, we can try set the webcam resolution
+	if (!sizeArgsSet)
 	{
-		bool res = true;
-		res &= cap.set(CAP_PROP_FRAME_WIDTH, width);
-		res &= cap.set(CAP_PROP_FRAME_HEIGHT, height);
-		if (!res)
-		{
-			cerr << "[Error] -- Failed to set webcam resolution to " << width << "x" << height << " -- exiting." << endl;
-			return EXIT_FAILURE;
-		}
+		width = calibWidth;
+		height = calibHeight;
 	}
-
-	// Scale the calibration file to potentially different input resolution
-	scaleCalib();
 	
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
 	if (loadMap)
@@ -132,8 +131,11 @@ int main(int argc, const char *argv[])
 			break;
 		}
 
-		// Scale the image if required
-		scaleIm(im);
+		// Resize im if necessary
+		if (sizeArgsSet)
+		{
+			scaleIm(im);
+		}
 
 		// Get the timestamp
 		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -154,17 +156,22 @@ int main(int argc, const char *argv[])
 	return EXIT_SUCCESS;
 }
 
+bool is_number(const string& s)
+{
+	return !s.empty() && find_if(s.begin(),
+		s.end(), [](char c) { return !isdigit(c); }) == s.end();
+}
+
 /* Parses the program arguments and sets the global variables using tclap */
 int parseProgramArguments(int argc, const char *argv[])
 {
 	using namespace TCLAP;
 	try {
 		// set up the args
-		CmdLine cmd("Runs ORB_SLAM2 with a monocular video file", ' ', "0.1");
+		CmdLine cmd("Runs ORB_SLAM2 with a monocular webcam or video file", ' ', "0.1");
 		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.bin", "string");
 		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
-		ValueArg<string> filePathArg("f", "filePath", "Path to input video file", false, "../test.avi", "string");
-		ValueArg<int> cameraIndexArg("c", "cameraIndex", "Index of the camera to use", false, -1, "integer");
+		ValueArg<string> camSourceArg("c", "cameraSource", "Directory or camera-index of the data source", false, "-1", "string");
 		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
 		ValueArg<int> widthArg("W", "resizeWidth", "Width to resize the video to", false, -1, "integer");
 		ValueArg<int> heightArg("H", "resizeHeight", "Height to resize the video to", false, -1, "integer");
@@ -172,11 +179,10 @@ int parseProgramArguments(int argc, const char *argv[])
 		// add the args
 		cmd.add(vocabPathArg);
 		cmd.add(settingsPathArg);
-		cmd.add(filePathArg);
-		cmd.add(cameraIndexArg);
+		cmd.add(camSourceArg);
+		cmd.add(loadMapArg);
 		cmd.add(widthArg);
 		cmd.add(heightArg);
-		cmd.add(loadMapArg);
 
 		// parse the args
 		cmd.parse(argc, argv);
@@ -184,20 +190,20 @@ int parseProgramArguments(int argc, const char *argv[])
 		// get the results
 		vocabPath = vocabPathArg.getValue();
 		settingsPath = settingsPathArg.getValue();
-		filePath = filePathArg.getValue();
-		cameraIndex = cameraIndexArg.getValue();
+		filePath = camSourceArg.getValue();
+		loadMap = loadMapArg.getValue();
 		width = widthArg.getValue();
 		height = heightArg.getValue();
-		loadMap = loadMapArg.getValue();
 
-		// make sure that either camera index or file path is set
-		if (!cameraIndexArg.isSet() && !filePathArg.isSet())
+		if (is_number(filePath))
 		{
-			return 1;
+			webcamMode = true;
+			cameraIndex = atoi(filePath.c_str());
 		}
-
-		// set the mode as webcam or file -- webcam mode overrides file mode
-		webcamMode = cameraIndexArg.isSet() ? true : false;
+		else
+		{
+			webcamMode = false;
+		}
 
 	} // catch any exceptions 
 	catch (ArgException &e) {
@@ -207,20 +213,20 @@ int parseProgramArguments(int argc, const char *argv[])
 }
 
 /* Scales the calibration data to the input video resolution */
-void scaleCalib()
+bool scaleCalib()
 {
 	// open the original calibration
 	FileStorage fsSettings(settingsPath, FileStorage::READ);
 
 	// get the calibration and input resolutions
-	double calibWidth = fsSettings["Image.width"];
-	double calibHeight = fsSettings["Image.height"];
+	double calibWidth = fsSettings["Camera.width"];
+	double calibHeight = fsSettings["Camera.height"];
 
 	// only continue if the calibration file actually had the calibration resolution inside
 	if (calibWidth <= 0 || calibHeight <= 0)
 	{
-		cout << "Image.width and Image.height not found in calibration file, scaling is impossible." << endl;
-		return;
+		cout << "Camera.width and Camera.height not found in calibration file, scaling is impossible." << endl;
+		return false;
 	}
 
 	// calculate scaling
@@ -231,7 +237,7 @@ void scaleCalib()
 	if (width == calibWidth || sw != sh)
 	{
 		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
-		return;
+		return false;
 	}
 	else
 	{
@@ -260,10 +266,11 @@ void scaleCalib()
 
 	// overwrite the settings path
 	settingsPath = tempSettingsPath;
+	return true;
 }
 void scaleIm(Mat &im)
 {
-	if (width != im.cols)
+	if (width != im.cols || height != im.rows)
 		resize(im, im, Size(width, height), 0.0, 0.0, CV_INTER_AREA);
 }
 void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
