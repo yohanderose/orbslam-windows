@@ -607,6 +607,12 @@ std::vector<MapPoint*> System::GetAllMapPoints()
 	return mpMap->GetAllMapPoints();
 }
 
+Map *System::GetMap()
+{
+	unique_lock<mutex> lock(mMutexState);
+	return mpMap;
+}
+
 void System::ChangeCalibration(const string &strSettingPath)
 {
 	unique_lock<mutex> lock(mMutexState);

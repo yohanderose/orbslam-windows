@@ -92,7 +92,19 @@ namespace ORB_SLAM2
 			}
 		}
 		void Keyboard(pangolin::View&, unsigned char key, int x, int y, bool pressed)
-		{ }
+		{
+			if (key == 127 && !pressed) // delete
+			{
+				Map *map = ctx->GetMap();
+				// loop over all the map points
+				std::vector<MapPoint *> mps = ctx->GetAllMapPoints();
+				for (MapPoint *mp : mps)
+				{
+					if (mp->isSelected())
+						map->EraseMapPoint(mp);
+				}
+			}
+		}
 		void Special(pangolin::View&, pangolin::InputSpecial inType, float x, float y, float p1, float p2, float p3, float p4, int button_state)
 		{ }
 	};
