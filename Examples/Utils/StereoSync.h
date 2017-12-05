@@ -7,15 +7,19 @@
 class StereoSync
 {
 public:
+	StereoSync(std::vector<std::string> directories);
+	StereoSync(std::string directory);
 	StereoSync();
-	StereoSync(std::string leftDir, std::string rightDir);
 
 private:
 	int idx;
-	std::vector<std::string> leftFrames;
-	std::vector<std::string> associatedRightFrames;
+	std::vector<std::vector<std::string>> associations;
+
+	void SetAssociations(std::vector<std::string> directories);
+	bool LoadAssociationsFromFile(std::string directory);
+	void SaveAssociationsToFile(std::string directory);
 
 public:
-	bool GetSyncedFramePaths(std::string &leftPath, std::string &rightPath);
+	bool GetSyncedFramePaths(std::vector<std::string>& framePaths);
 };
 

@@ -72,6 +72,9 @@ public:
     void SetBadFlag();
     bool isBad();
 
+	void SetSelectedFlag(bool val);
+	bool isSelected();
+
     void Replace(MapPoint* pMP);    
     MapPoint* GetReplaced();
 
@@ -165,6 +168,7 @@ protected:
 	 std::mutex mMutexPos;
      std::mutex mMutexFeatures;
 
+	 bool mbSelected;
 
 	 friend class boost::serialization::access;
  template<class Archive>

@@ -50,7 +50,7 @@ namespace ORB_SLAM2
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
                const bool bUseViewer, const bool bReuse):mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false),mbActivateLocalizationMode(bReuse),
-        mbDeactivateLocalizationMode(false)
+        mbDeactivateLocalizationMode(false), mbActivateEditMode(false), mbDeactivateEditMode(true)
 {
     // Output welcome message
     cout << endl <<
@@ -207,6 +207,14 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
             mpLocalMapper->Release();
             mbDeactivateLocalizationMode = false;
         }
+		if (mbActivateEditMode)
+		{
+			cout << "Activate\n";
+		}
+		if (mbDeactivateEditMode)
+		{
+			cout << "Deactivate\n";			
+		}
     }
 
     // Check reset
@@ -343,6 +351,18 @@ void System::DeactivateLocalizationMode()
     mbDeactivateLocalizationMode = true;
 }
 
+void System::ActivateEditMode()
+{
+	unique_lock<mutex> lock(mMutexMode);
+	mbActivateEditMode = true;
+}
+
+void System::DeactivateEditMode()
+{
+	unique_lock<mutex> lock(mMutexMode);
+	mbDeactivateEditMode = true;
+}
+
 bool System::MapChanged()
 {
     static int n=0;
@@ -472,7 +492,6 @@ void System::SaveTrajectoryTUM(const string &filename)
     cout << endl << "trajectory saved!" << endl;
 }
 
-
 void System::SaveKeyFrameTrajectoryTUM(const string &filename)
 {
     cout << endl << "Saving keyframe trajectory to " << filename << " ..." << endl;
@@ -581,7 +600,6 @@ vector<cv::KeyPoint> System::GetTrackedKeyPointsUn()
     unique_lock<mutex> lock(mMutexState);
     return mTrackedKeyPointsUn;
 }
-
 
 std::vector<MapPoint*> System::GetAllMapPoints()
 {

@@ -131,6 +131,12 @@ add_executable(pano_video
 )
 target_link_libraries(pano_video ${PROJECT_NAME})
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Utils)
+add_executable(map_editor
+	Examples/Utils/map_editor.cc
+)
+target_link_libraries(map_editor ${PROJECT_NAME})
+
 # Build example AR demo
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
 add_executable(mono_webcam_ar

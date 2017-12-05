@@ -102,7 +102,7 @@ int main(int argc, const char *argv[])
 	else
 	{
 		// Set up stereo frame syncer
-		sync = StereoSync(filePathLeft, filePathRight);
+		sync = StereoSync(filePathLeft);
 	}
 
 	// If we are trying to resize, try to scale the calibration file, if that works, resize rectified images as they arrive
@@ -148,10 +148,10 @@ int main(int argc, const char *argv[])
 		}
 		else
 		{
-			string lPath, rPath;
-			sync.GetSyncedFramePaths(lPath, rPath);
-			frameLeft = imread(lPath, CV_LOAD_IMAGE_COLOR);
-			frameRight = imread(rPath, CV_LOAD_IMAGE_COLOR);
+			vector<string> paths;
+			sync.GetSyncedFramePaths(paths);
+			frameLeft = imread(paths[0], CV_LOAD_IMAGE_COLOR);
+			frameRight = imread(paths[1], CV_LOAD_IMAGE_COLOR);
 		}
 
 		// Get the timestamp

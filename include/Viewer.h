@@ -27,6 +27,8 @@
 #include "Tracking.h"
 #include "System.h"
 
+#include <pangolin/pangolin.h>
+
 #include <mutex>
 
 namespace ORB_SLAM2
@@ -36,6 +38,7 @@ class Tracking;
 class FrameDrawer;
 class MapDrawer;
 class System;
+struct EditHandler;
 
 class Viewer
 {
@@ -60,6 +63,7 @@ private:
 
     bool Stop();
 	bool mbReuse;
+	bool mbEdit;
     System* mpSystem;
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
@@ -80,6 +84,9 @@ private:
     bool mbStopped;
     bool mbStopRequested;
     std::mutex mMutexStop;
+
+	pangolin::Handler *handler3D;
+	EditHandler *handlerEdit;
 
 };
 

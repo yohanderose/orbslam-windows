@@ -21,10 +21,81 @@
 #include "Viewer.h"
 #include <pangolin/pangolin.h>
 
+#include <opencv2/core.hpp>
+
 #include <mutex>
 
 namespace ORB_SLAM2
 {
+
+	struct EditHandler : public pangolin::Handler 
+	{
+		EditHandler()
+		{ }
+		EditHandler(pangolin::OpenGlRenderState& s_cam)
+			: s_cam(&s_cam)
+		{ }
+		System *ctx;
+		pangolin::OpenGlRenderState *s_cam;
+		
+		int rx1, ry1;
+		void SetContext(System *_ctx)
+		{
+			ctx = _ctx;
+		}
+		void Mouse(pangolin::View& d_cam, pangolin::MouseButton button, int x, int y, bool pressed, int button_state)
+		{
+			if (ctx)
+			{
+				if (button == pangolin::MouseButtonLeft)
+				{
+					// button released
+					if (button_state == 0)
+					{
+						// set the selection region second co-ordinate
+						int rx2 = x;
+						int ry2 = y;
+
+						// get the stuff required for glProject
+						GLint viewport[4] = { d_cam.v.l, d_cam.v.b, d_cam.v.w, d_cam.v.h };
+						double *modelViewMat = s_cam->GetModelViewMatrix().m;
+						double *projectionMat = s_cam->GetProjectionMatrix().m;
+
+						// loop over all the map points
+						std::vector<MapPoint *> mps = ctx->GetAllMapPoints();
+						for (MapPoint *mp : mps)
+						{
+							cv::Mat wp = mp->GetWorldPos();
+
+							// project the map point into screen co-ordinates
+							double winX, winY, winZ;
+							pangolin::glProject(wp.at<float>(0), wp.at<float>(1), wp.at<float>(2), modelViewMat, projectionMat, viewport, &winX, &winY, &winZ);
+
+							// check if it is contained
+							if (winX > min(rx1, rx2) &&
+								winX < max(rx1, rx2) &&
+								winY > min(ry1, ry2) &&
+								winY < max(ry1, ry2))
+							{
+								mp->SetSelectedFlag(true);
+							}
+						}
+					}
+					// button pressed
+					else
+					{
+						// set the selection region first co-ordinate
+						rx1 = x;
+						ry1 = y;
+					}
+				}
+			}
+		}
+		void Keyboard(pangolin::View&, unsigned char key, int x, int y, bool pressed)
+		{ }
+		void Special(pangolin::View&, pangolin::InputSpecial inType, float x, float y, float p1, float p2, float p3, float p4, int button_state)
+		{ }
+	};
 
 Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Tracking *pTracking, const string &strSettingPath, bool bReuse):
     mpSystem(pSystem), mpFrameDrawer(pFrameDrawer),mpMapDrawer(pMapDrawer), mpTracker(pTracking),
@@ -50,6 +121,7 @@ Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer
     mViewpointZ = fSettings["Viewer.ViewpointZ"];
     mViewpointF = fSettings["Viewer.ViewpointF"];
     mbReuse = bReuse;
+	mbEdit = false;
 }
 
 void Viewer::Run()
@@ -73,17 +145,23 @@ void Viewer::Run()
     pangolin::Var<bool> menuShowGraph("menu.Show Graph",true,true);
     pangolin::Var<bool> menuLocalizationMode("menu.Localization Mode",mbReuse,true);
     pangolin::Var<bool> menuReset("menu.Reset",false,false);
+	pangolin::Var<bool> menuEditMode("menu.Edit Mode", mbEdit, true);
 
     // Define Camera Render Object (for view / scene browsing)
     pangolin::OpenGlRenderState s_cam(
                 pangolin::ProjectionMatrix(1024,768,mViewpointF,mViewpointF,512,389,0.1,1000),
                 pangolin::ModelViewLookAt(mViewpointX,mViewpointY,mViewpointZ, 0,0,0,0.0,-1.0, 0.0)
                 );
-
+	
     // Add named OpenGL viewport to window and provide 3D Handler
+	handler3D = new pangolin::Handler3D(s_cam);
+	handlerEdit = new EditHandler(s_cam);
+	handlerEdit->SetContext(mpSystem);
+
     pangolin::View& d_cam = pangolin::CreateDisplay()
             .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
-            .SetHandler(new pangolin::Handler3D(s_cam));
+            .SetHandler(handler3D);
+
 
     pangolin::OpenGlMatrix Twc;
     Twc.SetIdentity();
@@ -92,6 +170,7 @@ void Viewer::Run()
 
     bool bFollow = true;
     bool bLocalizationMode = mbReuse;
+	bool bEditMode = mbEdit;
 
     while(1)
     {
@@ -124,6 +203,20 @@ void Viewer::Run()
             mpSystem->DeactivateLocalizationMode();
             bLocalizationMode = false;
         }
+		
+		// bakelew Map edit
+		if (menuEditMode && !bEditMode)
+		{
+			mpSystem->ActivateEditMode();
+			bEditMode = true;
+			d_cam.SetHandler(handlerEdit);
+		}
+		else if (!menuEditMode && bEditMode)
+		{
+			mpSystem->DeactivateEditMode();
+			bEditMode = false;
+			d_cam.SetHandler(handler3D);
+		}
 
         d_cam.Activate(s_cam);
         glClearColor(1.0f,1.0f,1.0f,1.0f);
