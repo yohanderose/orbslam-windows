@@ -62,7 +62,7 @@ void MapDrawer::DrawMapPoints()
         cv::Mat pos = vpMPs[i]->GetWorldPos();
 		if (vpMPs[i]->isSelected())
 		{
-			glColor3f(0.0, 1.0, 1.0);
+			glColor3f(0.0, 0.8, 0.7);
 		}
 		else
 		{

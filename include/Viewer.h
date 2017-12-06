@@ -59,6 +59,10 @@ public:
 
     void Release();
 
+	void SetSelectionBoundingBox(int x1, int y1, int x2, int y2);
+	void ClearSelectionBoundingBox();
+	void DrawSelectionBoundingBox(pangolin::View &d_cam);
+
 private:
 
     bool Stop();
@@ -87,6 +91,9 @@ private:
 
 	pangolin::Handler *handler3D;
 	EditHandler *handlerEdit;
+
+	vector<int> mvSelectionBoundingBox;
+	
 
 };
 
