@@ -209,11 +209,11 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
         }
 		if (mbActivateEditMode)
 		{
-			cout << "Activate\n";
+			//cout << "Activate\n";
 		}
 		if (mbDeactivateEditMode)
 		{
-			cout << "Deactivate\n";			
+			//cout << "Deactivate\n";			
 		}
     }
 

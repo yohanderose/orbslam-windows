@@ -29,6 +29,7 @@
 #include <tclap/CmdLine.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
+#include <boost/filesystem.hpp>
 
 #include "../Utils/MyARViewer.h"
 #include "../Utils/StereoRectification.h"
@@ -135,8 +136,12 @@ int main(int argc, const char *argv[])
 
 	// Main loop
 	Mat frameLeftRect, frameRightRect;
-	while (true)
+
+	string inputWindowTitle = "Rectified stereo input -- Press Esc to quit";
+	namedWindow(inputWindowTitle, CV_WINDOW_NORMAL);
+	for (long long i = 0; true; ++i)
 	{
+		long long ts = 0;
 		// Get the frames
 		if (webcamMode)
 		{
@@ -150,12 +155,14 @@ int main(int argc, const char *argv[])
 		{
 			vector<string> paths;
 			sync.GetSyncedFramePaths(paths);
-			frameLeft = imread(paths[0], CV_LOAD_IMAGE_COLOR);
-			frameRight = imread(paths[1], CV_LOAD_IMAGE_COLOR);
+			if (i < 1800) continue;
+			frameLeft = imread(paths[1], CV_LOAD_IMAGE_COLOR);
+			frameRight = imread(paths[2], CV_LOAD_IMAGE_COLOR);
+			ts = stoll(boost::filesystem::path(paths[0]).stem().generic_string());
 		}
 
 		// Get the timestamp
-		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		__int64 curNow = ts ? ts : std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
 		// Check that it is all good
 		if (frameLeft.empty() || frameRight.empty())
@@ -167,15 +174,23 @@ int main(int argc, const char *argv[])
 		rectifier.stereoRectify(frameLeft, frameRight, frameLeftRect, frameRightRect);
 
 		// Resize them if necessary
-		if (sizeArgsSet) 
+		if (sizeArgsSet)
 		{
 			scaleIm(frameLeftRect);
 			scaleIm(frameRightRect);
 		}
 
-		imshow("l", frameLeftRect);
-		imshow("r", frameRightRect);
-		waitKey(1);
+		Mat both = Mat(max(frameLeftRect.rows, frameRightRect.rows), frameLeftRect.cols + frameRightRect.cols, frameLeftRect.type());
+		Mat lRoi = both(Rect(0, 0, frameLeftRect.cols, frameLeftRect.rows));
+		Mat rRoi = both(Rect(frameLeftRect.cols, 0, frameRightRect.cols, frameRightRect.rows));
+		frameLeftRect.copyTo(lRoi);
+		frameRightRect.copyTo(rRoi);
+		imshow(inputWindowTitle, both);
+		int c = waitKey(1);
+		if (c == 27)
+		{
+			break;
+		}
 
 		// Pass the image to the SLAM system
 		cameraPose = SLAM->TrackStereo(frameLeftRect, frameRightRect, curNow / 1000.0);
