@@ -114,7 +114,8 @@ find_package(KinectSDK2 QUIET)
 if(KinectSDK2_FOUND)
 	add_executable(rgbd_kinect2
 		Examples/RGB-D/rgbd_kinect2.cc
-		Examples/RGB-D/KinectRgbd.cpp
+		Examples/Utils/KinectRgbd.cc
+		Examples/Utils/MyARViewer.cc
 	)
 	target_include_directories(rgbd_kinect2 PRIVATE ${KinectSDK2_INCLUDE_DIRS} )
 	target_link_libraries(rgbd_kinect2 

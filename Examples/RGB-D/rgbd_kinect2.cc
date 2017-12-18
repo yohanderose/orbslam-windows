@@ -28,8 +28,9 @@
 #include <opencv2/core/core.hpp>
 #include <pangolin/pangolin.h>
 
-#include "KinectRgbd.h"
+#include "../Utils/KinectRgbd.h"
 #include "../Utils/CommandLine.h"
+#include "../Utils/MyARViewer.h"
 
 
 using namespace std;
@@ -37,18 +38,10 @@ using namespace cv;
 using namespace ORB_SLAM2;
 
 
-#define radiansToDegrees(angleRadians) (angleRadians * 180.0 / M_PI)
-
-vector<Point3f> worldPoints;
-vector<Point3f> worldPointNormals;
-bool drawNormals = false;
-
 bool parseProgramArguments(int argc, const char *argv[]);
 void scaleCalib();
 void scaleIm(Mat &im);
 void settingsFileUpdate(string &filePath, string name, string val);
-void initPangolinARWindow(pangolin::View& viewReal);
-void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, Mat& pose, Mat& camFrame);
 
 
 string vocabPath;
@@ -62,153 +55,7 @@ bool loadMap;
 
 Mat cameraPose;
 
-System *SLAM = NULL;
 
-void KeyNFunction(void)
-{
-	drawNormals = !drawNormals;
-}
-
-void KeySFunction(void)
-{
-	worldPoints.clear();
-	worldPointNormals.clear();
-}
-
-void KeyAFunction(void)
-{
-	worldPoints.clear();
-	worldPointNormals.clear();
-
-	if (cameraPose.empty())
-		return;
-
-	vector<MapPoint *> mapPoints = SLAM->GetAllMapPoints();
-	for (vector<MapPoint *>::iterator mit = mapPoints.begin(); mit != mapPoints.end(); mit++)
-	{
-		if (*mit == NULL)
-			continue;
-
-		Mat wp = (*mit)->GetWorldPos();
-		worldPoints.push_back(Point3f(
-			wp.at<float>(0, 0),
-			wp.at<float>(1, 0),
-			wp.at<float>(2, 0)));
-
-		Mat n = (*mit)->GetNormal() * 0.05;
-		worldPointNormals.push_back(Point3f(
-			n.at<float>(0, 0),
-			n.at<float>(1, 0),
-			n.at<float>(2, 0)));
-	}
-}
-
-void renderPangolinARFrame(const string& strSettingPath, pangolin::View& viewReal, Mat& pose, Mat& camFrame)
-{
-	if (!pangolin::ShouldQuit())
-	{
-		Mat camFrameRgb;
-		FileStorage fSettings(strSettingPath, FileStorage::READ);
-		cvtColor(camFrame, camFrameRgb, CV_BGR2RGB);
-
-		pangolin::GlTexture imageTexture(camFrameRgb.cols, camFrameRgb.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
-		imageTexture.Upload(camFrameRgb.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
-
-		GLfloat znear = 0.01, zfar = 20;
-
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glViewport(0, 0, cameraWidth, cameraHeight);
-		glMatrixMode(GL_PROJECTION);
-
-		viewReal.Activate();
-		glDisable(GL_DEPTH_TEST);
-		glColor3f(1.0, 1.0, 1.0);
-		imageTexture.RenderToViewport(true);
-
-		if (!pose.empty())
-		{
-			float rxd = radiansToDegrees(atan2f(pose.at<float>(2, 1), pose.at<float>(2, 2)));
-			float ryd = radiansToDegrees(atan2f(-pose.at<float>(2, 0), sqrtf(pow(pose.at<float>(2, 1), 2) + pow(pose.at<float>(2, 2), 2))));
-			float rzd = radiansToDegrees(atan2f(pose.at<float>(1, 0), pose.at<float>(0, 0)));
-			float tx = pose.at<float>(0, 3);
-			float ty = pose.at<float>(1, 3);
-			float tz = pose.at<float>(2, 3);
-
-			GLfloat m[4][4];
-			GLfloat fx = fSettings["Camera.fx"];
-			GLfloat fy = fSettings["Camera.fy"];
-			GLfloat cx = fSettings["Camera.cx"];
-			GLfloat cy = fSettings["Camera.cy"];
-
-			m[0][0] = 2.0 * fx / cameraWidth;
-			m[0][1] = 0.0;
-			m[0][2] = 0.0;
-			m[0][3] = 0.0;
-
-			m[1][0] = 0.0;
-			m[1][1] = -2.0 * fy / cameraHeight;
-			m[1][2] = 0.0;
-			m[1][3] = 0.0;
-
-			m[2][0] = 1.0 - 2.0 * cx / cameraWidth;
-			m[2][1] = 2.0 * cy / cameraHeight - 1.0;
-			m[2][2] = (zfar + znear) / (znear - zfar);
-			m[2][3] = -1.0;
-
-			m[3][0] = 0.0;
-			m[3][1] = 0.0;
-			m[3][2] = 2.0 * zfar * znear / (znear - zfar);
-			m[3][3] = 0.0;
-
-			glLoadIdentity();
-			glMultMatrixf((GLfloat *)m);
-
-			glTranslated(tx, ty, -tz);
-			glRotated(rzd, 0.0, 0.0, 1.0);
-			glRotated(-ryd, 0.0, 1.0, 0.0);
-			glRotated(-rxd, 1.0, 0.0, 0.0);
-
-			glEnable(GL_DEPTH_TEST);
-			pangolin::glDrawColouredCube(-0.005f, 0.005f);
-
-			glPointSize(5.0f);
-			for (int i = 0; i < worldPoints.size(); ++i)
-			{
-				glBegin(GL_POINTS);
-				glColor3f(1.0f, 1.0f, 1.0f);
-				glVertex3f(worldPoints[i].x, worldPoints[i].y, -worldPoints[i].z);
-				glEnd();
-
-				if (drawNormals)
-				{
-					glBegin(GL_LINES);
-					glColor3f(0.0f, 0.0f, 1.0f);
-					glVertex3f(worldPoints[i].x, worldPoints[i].y, -worldPoints[i].z);
-					glVertex3f(worldPoints[i].x + worldPointNormals[i].x, worldPoints[i].y + worldPointNormals[i].y, -worldPoints[i].z + worldPointNormals[i].z);
-					glEnd();
-				}
-			}
-
-		}
-		else {
-			pangolin::glDrawAxis(1000000.f);
-		}
-
-		// Swap frames and Process Events
-		pangolin::FinishFrame();
-	}
-}
-
-void initPangolinARWindow(pangolin::View& viewReal)
-{
-	pangolin::CreateWindowAndBind("Main", cameraWidth, cameraHeight);
-	glEnable(GL_DEPTH_TEST);
-	viewReal = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-cameraWidth / (double)cameraHeight);
-	pangolin::RegisterKeyPressCallback('a', KeyAFunction);
-	pangolin::RegisterKeyPressCallback('s', KeySFunction);
-	pangolin::RegisterKeyPressCallback('n', KeyNFunction);
-	return;
-}
 
 #include <mutex>
 mutex cMtx, dMtx;
@@ -239,8 +86,11 @@ int main(int argc, const char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	System *SLAM = NULL;
+
 	scaleCalib();
 
+	
 	KinectRgbd k;
 	if (!k.IsValid())
 	{
@@ -249,6 +99,7 @@ int main(int argc, const char *argv[])
 	}
 	k.StartColorStream(GetColorFrame);
 	k.StartDepthStream(GetDepthFrame);
+	
 
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
 	if (loadMap)
@@ -260,15 +111,8 @@ int main(int argc, const char *argv[])
 		SLAM = new System(vocabPath, settingsPath, System::RGBD, true, false);
 	}
 
-	if (SLAM == NULL)
-	{
-		cout << "SLAM is NULL" << endl;
-		return EXIT_FAILURE;
-	}
-
 	// Set up the opengl AR frame
-	pangolin::View viewReal;
-	initPangolinARWindow(viewReal);
+	MyARViewer viewer(SLAM, settingsPath, cameraWidth, cameraHeight);
 
 	cout << endl << "-------" << endl;
 	cout << "Start processing sequence ..." << endl;
@@ -289,8 +133,8 @@ int main(int argc, const char *argv[])
 			__int64 curNow = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch()).count();
 
 			// Pass the image to the SLAM system
-			cameraPose = SLAM->TrackRGBD(cfMat, dfMat, curNow / 1000.0);
-			renderPangolinARFrame(settingsPath, viewReal, cameraPose, cfMat);
+			cameraPose = SLAM->TrackRGBD(cfMat, dfMat, curNow / 1000.0);		
+			viewer.renderARFrame(cameraPose, cfMat);
 
 			cReady = false;
 			dReady = false;
