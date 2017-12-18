@@ -25,11 +25,11 @@
 #include <ctime>
 
 #include <System.h>
-#include <tclap/CmdLine.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
 #include "../Utils/MyARViewer.h"
+#include "../Utils/CommandLine.h"
 
 
 using namespace std;
@@ -38,7 +38,7 @@ using namespace ORB_SLAM2;
 
 
 /* Forward function declarations */
-int parseProgramArguments(int argc, const char *argv[]);
+bool parseProgramArguments(int argc, const char *argv[]);
 bool scaleCalib();
 void scaleIm(Mat &im);
 void settingsFileUpdate(string &filePath, string name, string val);
@@ -48,11 +48,9 @@ string vocabPath;
 string settingsPrefix;
 string settingsPath;
 string filePath;
-int cameraIndex;
 int width;
 int height;
 bool loadMap;
-bool webcamMode;
 
 /* Misc globals */
 VideoCapture cap;
@@ -67,8 +65,7 @@ bool changeCalib = false;
 int main(int argc, const char *argv[])
 {
 	// Parse the command line args
-	int res = parseProgramArguments(argc, argv);
-	if (res == 1) {
+	if (!parseProgramArguments(argc, argv)) {
 		cerr << "[Error] -- Failed to parse command line arguments -- exiting." << endl;
 		return EXIT_FAILURE;
 	}
@@ -77,17 +74,8 @@ int main(int argc, const char *argv[])
 	int faceIndex = 0;
 	string filename = "C:\\Users\\Lewis\\Desktop\\PhD\\PhdFiles\\thetas\\video\\er\\R0010055_er.MP4.d\\face" + to_string(faceIndexOrder[faceIndex]) + ".image%05d.jpg";
 
-	// Set up video source
-	if (webcamMode)
-	{
-		cout << cameraIndex << endl;
-		cap = VideoCapture(cameraIndex);
-	}
-	else
-	{
-		cout << filename << endl;
-		cap = VideoCapture(filename);
-	}
+	cout << filename << endl;
+	cap = VideoCapture(filename);
 
 	// Check it's good
 	if (!cap.isOpened())
@@ -100,17 +88,6 @@ int main(int argc, const char *argv[])
 	{
 		width = cap.get(CAP_PROP_FRAME_WIDTH);
 		height = cap.get(CAP_PROP_FRAME_HEIGHT);
-	}
-	else if (webcamMode) // if they were set, and we are using a webcam, we can try set the webcam resolution
-	{
-		bool res = true;
-		res &= cap.set(CAP_PROP_FRAME_WIDTH, width);
-		res &= cap.set(CAP_PROP_FRAME_HEIGHT, height);
-		if (!res)
-		{
-			cerr << "[Error] -- Failed to set webcam resolution to " << width << "x" << height << " -- exiting." << endl;
-			return EXIT_FAILURE;
-		}
 	}
 
 	if (changeCalib)
@@ -217,66 +194,47 @@ int main(int argc, const char *argv[])
 }
 
 /* Parses the program arguments and sets the global variables using tclap */
-int parseProgramArguments(int argc, const char *argv[])
+bool parseProgramArguments(int argc, const char *argv[])
 {
-	using namespace TCLAP;
-	try {
-		// set up the args
-		CmdLine cmd("Runs ORB_SLAM2 with a monocular video file", ' ', "0.1");
-		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.bin", "string");
-		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
-		ValueArg<string> filePathArg("f", "filePath", "Path to input video file", false, "../test.avi", "string");
-		ValueArg<int> cameraIndexArg("c", "cameraIndex", "Index of the camera to use", false, -1, "integer");
-		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
-		ValueArg<int> widthArg("W", "resizeWidth", "Width to resize the video to", false, -1, "integer");
-		ValueArg<int> heightArg("H", "resizeHeight", "Height to resize the video to", false, -1, "integer");
-		SwitchArg changeCalibArg("C", "changeCalib", "Use different calibration for all 8 faces", false);
+	bool result = true;
+	CommandLine cmd(argc, argv);
 
-		// add the args
-		cmd.add(vocabPathArg);
-		cmd.add(settingsPathArg);
-		cmd.add(filePathArg);
-		cmd.add(cameraIndexArg);
-		cmd.add(widthArg);
-		cmd.add(heightArg);
-		cmd.add(loadMapArg);
+	if (cmd.ContainsKey("v"))
+		if (!cmd.GetStringValue("v", vocabPath)) result = false;
 
-		// parse the args
-		cmd.parse(argc, argv);
+	if (cmd.ContainsKey("s"))
+		if (!cmd.GetStringValue("s", settingsPath)) result = false;
 
-		// get the results
-		vocabPath = vocabPathArg.getValue();
-		changeCalib = changeCalibArg.getValue();
-		filePath = filePathArg.getValue();
-		cameraIndex = cameraIndexArg.getValue();
-		width = widthArg.getValue();
-		height = heightArg.getValue();
-		loadMap = loadMapArg.getValue();
+	if (cmd.ContainsKey("f"))
+		if (!cmd.GetStringValue("f", filePath)) result = false;
 
-		// make sure that either camera index or file path is set
-		if (!cameraIndexArg.isSet() && !filePathArg.isSet())
-		{
-			return 1;
-		}
+	if (cmd.ContainsKey("l"))
+		loadMap = true;
 
-		// if we are changing the calibration, then the settings path passed in is actually a prefix
-		if (changeCalib)
-		{
-			settingsPrefix = settingsPathArg.getValue();
-		}
+	if (cmd.ContainsKey("r"))
+	{
+		vector<int> resolution;
+		if (!cmd.GetMultiIntValue("r", resolution))
+			result = false;
 		else
 		{
-			settingsPath = settingsPathArg.getValue();
+			width = resolution[0];
+			height = resolution[1];
 		}
-
-		// set the mode as webcam or file -- webcam mode overrides file mode
-		webcamMode = cameraIndexArg.isSet() ? true : false;
-
-	} // catch any exceptions 
-	catch (ArgException &e) {
-		return 1;
 	}
-	return 0;
+
+	if (cmd.ContainsKey("C"))
+	{
+		changeCalib = true;
+		settingsPrefix = settingsPath;
+	}
+
+	if (cmd.ContainsKey("h"))
+	{
+
+	}
+
+	return result;
 }
 
 /* Scales the calibration data to the input video resolution */
