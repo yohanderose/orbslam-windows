@@ -26,9 +26,11 @@
 #include <thread>
 
 #include <System.h>
-#include <tclap/CmdLine.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
+
+
+#include "../Utils/CommandLine.h"
 
 
 using namespace std;
@@ -37,7 +39,7 @@ using namespace ORB_SLAM2;
 
 
 /* Forward function declarations */
-int parseProgramArguments(int argc, const char *argv[]);
+bool parseProgramArguments(int argc, const char *argv[]);
 
 /* Program arg globals */
 string vocabPath;
@@ -48,8 +50,7 @@ string filePath;
 int main(int argc, const char *argv[])
 {
 	// Parse the command line args
-	int res = parseProgramArguments(argc, argv);
-	if (res == 1) {
+	if (!parseProgramArguments(argc, argv)) {
 		cerr << "[Error] -- Failed to parse command line arguments -- exiting." << endl;
 		return EXIT_FAILURE;
 	}
@@ -75,33 +76,20 @@ int main(int argc, const char *argv[])
 }
 
 /* Parses the program arguments and sets the global variables using tclap */
-int parseProgramArguments(int argc, const char *argv[])
+bool parseProgramArguments(int argc, const char *argv[])
 {
-	using namespace TCLAP;
-	try {
-		// set up the args
-		CmdLine cmd("Runs ORB_SLAM2 with stereo webcam or synchronized video frame directories", ' ', "0.1");
-		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.bin", "string");
-		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
-		ValueArg<string> mapSourceArg("m", "sourceLeft", "Path to map file to edit", false, "Slam_Map.bin", "string");
+	bool result = true;
+	CommandLine cmd(argc, argv);
 
-		// add the args
-		cmd.add(vocabPathArg);
-		cmd.add(settingsPathArg);
-		cmd.add(mapSourceArg);
+	if (cmd.ContainsKey("v"))
+		if (!cmd.GetStringValue("v", vocabPath)) result = false;
 
-		// parse the args
-		cmd.parse(argc, argv);
+	if (cmd.ContainsKey("s"))
+		if (!cmd.GetStringValue("s", settingsPath)) result = false;
 
-		// get the results
-		vocabPath = vocabPathArg.getValue();
-		settingsPath = settingsPathArg.getValue();
-		filePath = mapSourceArg.getValue();
+	if (cmd.ContainsKey("m"))
+		if (!cmd.GetStringValue("m", filePath)) result = false;
 
-	} // catch any exceptions 
-	catch (ArgException &e) {
-		return 1;
-	}
-	return 0;
+	return result;
 }
 
