@@ -65,8 +65,15 @@ public:
 				}
 				else if (seenKey)
 				{
-					result = std::stoi(arg);
-					setVal = true;
+					if (isNumber(arg))
+					{
+						result = std::stoi(arg);
+						setVal = true;
+					}
+					else
+					{
+						setVal = false;
+					}
 					seenKey = false;
 				}
 			}
@@ -93,8 +100,15 @@ public:
 				}
 				else if (seenKey)
 				{
-					result = std::stod(arg);
-					setVal = true;
+					if (isNumber(arg))
+					{
+						result = std::stod(arg);
+						setVal = true;
+					}
+					else
+					{
+						setVal = false;
+					}
 					seenKey = false;
 				}
 			}
@@ -154,9 +168,16 @@ public:
 					for (std::vector<std::string>::iterator valsIt = vals.begin(); valsIt != vals.end(); valsIt++)
 					{
 						std::string val = *valsIt;
-						result.push_back(std::stoi(val));
+						if (isNumber(val))
+						{
+							result.push_back(std::stoi(val));
+							setVal = true;
+						}
+						else
+						{
+							setVal = false;
+						}
 					}
-					setVal = true;
 					seenKey = false;
 				}
 			}
@@ -164,7 +185,7 @@ public:
 		}
 		catch (std::exception& e)
 		{
-			std::cerr << "[Error] -- Failed to parse program arguments.1" << std::endl;
+			std::cerr << "[Error] -- Failed to parse program arguments." << std::endl;
 			return false;
 		}
 	}
@@ -187,9 +208,16 @@ public:
 					for (std::vector<std::string>::iterator valsIt = vals.begin(); valsIt != vals.end(); valsIt++)
 					{
 						std::string val = *valsIt;
-						result.push_back(std::stod(val));
+						if (isNumber(val))
+						{
+							result.push_back(std::stod(val));
+							setVal = true;
+						}
+						else
+						{
+							setVal = false;
+						}
 					}
-					setVal = true;
 					seenKey = false;
 				}
 			}
@@ -251,6 +279,29 @@ private:
 		}
 
 		return result;
+	}
+	bool isNumber(const std::string& s)
+	{
+		int nb_point = 0;
+		for (int i = 0; i < s.length(); i++)
+		{
+			if (s[i] == '.')
+			{
+				nb_point++;
+			}
+			else if (!isdigit(s[i]))
+			{
+				return false;
+			}
+		}
+		if (nb_point <= 1)
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
 	}
 
 };

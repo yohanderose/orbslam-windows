@@ -26,7 +26,6 @@
 #include <thread>
 
 #include <System.h>
-#include <tclap/CmdLine.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <boost/filesystem.hpp>
@@ -34,6 +33,7 @@
 #include "../Utils/MyARViewer.h"
 #include "../Utils/StereoRectification.h"
 #include "../Utils/StereoSync.h"
+#include "../Utils/CommandLine.h"
 
 
 using namespace std;
@@ -42,7 +42,7 @@ using namespace ORB_SLAM2;
 
 
 /* Forward function declarations */
-int parseProgramArguments(int argc, const char *argv[]);
+bool parseProgramArguments(int argc, const char *argv[]);
 bool scaleCalib();
 void scaleIm(Mat &im);
 void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
@@ -70,8 +70,7 @@ Mat frameLeft, frameRight;
 int main(int argc, const char *argv[])
 {
 	// Parse the command line args
-	int res = parseProgramArguments(argc, argv);
-	if (res == 1) {
+	if (!parseProgramArguments(argc, argv)) {
 		cerr << "[Error] -- Failed to parse command line arguments -- exiting." << endl;
 		return EXIT_FAILURE;
 	}
@@ -209,64 +208,63 @@ int main(int argc, const char *argv[])
 	return EXIT_SUCCESS;
 }
 
-bool is_number(const string& s)
-{
-	return !s.empty() && find_if(s.begin(),
-		s.end(), [](char c) { return !isdigit(c); }) == s.end();
-}
-
 /* Parses the program arguments and sets the global variables using tclap */
-int parseProgramArguments(int argc, const char *argv[])
+bool parseProgramArguments(int argc, const char *argv[])
 {
-	using namespace TCLAP;
-	try {
-		// set up the args
-		CmdLine cmd("Runs ORB_SLAM2 with stereo webcam or synchronized video frame directories", ' ', "0.1");
-		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.bin", "string");
-		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
-		ValueArg<string> sourceLeftArg("L", "sourceLeft", "Directory or camera-index of right camera data source", false, "-1", "string");
-		ValueArg<string> sourceRightArg("R", "sourceRight", "Directory or camera-index of right camera data source", false, "-1", "string");
-		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
-		ValueArg<int> widthArg("W", "resizeWidth", "Width to resize the video to", false, -1, "integer");
-		ValueArg<int> heightArg("H", "resizeHeight", "Height to resize the video to", false, -1, "integer");
+	bool result = true;
+	CommandLine cmd(argc, argv);
 
-		// add the args
-		cmd.add(vocabPathArg);
-		cmd.add(settingsPathArg);
-		cmd.add(sourceLeftArg);
-		cmd.add(sourceRightArg);
-		cmd.add(loadMapArg);
-		cmd.add(widthArg);
-		cmd.add(heightArg);
+	if (cmd.ContainsKey("v"))
+		if (!cmd.GetStringValue("v", vocabPath)) result = false;
 
-		// parse the args
-		cmd.parse(argc, argv);
+	if (cmd.ContainsKey("s"))
+		if (!cmd.GetStringValue("s", settingsPath)) result = false;
 
-		// get the results
-		vocabPath = vocabPathArg.getValue();
-		settingsPath = settingsPathArg.getValue();
-		filePathRight = sourceRightArg.getValue();
-		filePathLeft = sourceLeftArg.getValue();
-		loadMap = loadMapArg.getValue();
-		width = widthArg.getValue();
-		height = heightArg.getValue();
-
-		if (is_number(filePathLeft) && is_number(filePathRight))
+	if (cmd.ContainsKey("L"))
+	{
+		if (cmd.GetIntValue("L", cameraIndexLeft))
 		{
 			webcamMode = true;
-			cameraIndexLeft = atoi(filePathLeft.c_str());
-			cameraIndexRight = atoi(filePathRight.c_str());
+		}
+		else if (!cmd.GetStringValue("L", filePathLeft))
+		{
+			result = false;
+		}
+	}
+
+	if (cmd.ContainsKey("R"))
+	{
+		if (webcamMode)
+		{
+			if (!cmd.GetIntValue("R", cameraIndexRight)) result = false;
 		}
 		else
 		{
-			webcamMode = false;
+			if (!cmd.GetStringValue("R", filePathRight)) result = false;
 		}
-
-	} // catch any exceptions 
-	catch (ArgException &e) {
-		return 1;
 	}
-	return 0;
+
+	if (cmd.ContainsKey("l"))
+		loadMap = true;
+
+	if (cmd.ContainsKey("r"))
+	{
+		vector<int> resolution;
+		if (!cmd.GetMultiIntValue("r", resolution))
+			result = false;
+		else
+		{
+			width = resolution[0];
+			height = resolution[1];
+		}
+	}
+
+	if (cmd.ContainsKey("h"))
+	{
+
+	}
+
+	return result;
 }
 
 void getFrameAsync(cv::VideoCapture &cap, int idx)
