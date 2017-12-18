@@ -25,11 +25,11 @@
 #include <ctime>
 
 #include <System.h>
-#include <tclap/CmdLine.h>
 #include <opencv2/core/core.hpp>
 #include <pangolin/pangolin.h>
 
 #include "../Utils/ViewerAR.h"
+#include "../Utils/CommandLine.h"
 
 
 using namespace std;
@@ -37,7 +37,7 @@ using namespace cv;
 using namespace ORB_SLAM2;
 
 
-int parseProgramArguments(int argc, const char *argv[]);
+bool parseProgramArguments(int argc, const char *argv[]);
 bool scaleCalib();
 void scaleIm(Mat &im);
 void settingsFileUpdate(string &filePath, string name, string val);
@@ -102,8 +102,7 @@ void setupViewerAR()
 int main(int argc, const char *argv[])
 {
 	// parse the command line args
-	int res = parseProgramArguments(argc, argv);
-	if (res == 1) {
+	if (!parseProgramArguments(argc, argv)) {
 		cerr << "[Warning] -- Failed to parse command line arguments -- exiting." << endl;
 		return EXIT_FAILURE;
 	}
@@ -204,44 +203,43 @@ int main(int argc, const char *argv[])
 	return EXIT_SUCCESS;
 }
 
-int parseProgramArguments(int argc, const char *argv[])
+bool parseProgramArguments(int argc, const char *argv[])
 {
-	using namespace TCLAP;
-	try {
-		// set up the args
-		CmdLine cmd("Runs ORB_SLAM2 AR demo with a monocular webcam", ' ', "0.1");
-		ValueArg<string> vocabPathArg("v", "vocabPath", "Path to ORB vocabulary", false, "../ORBvoc.txt", "string");
-		ValueArg<string> settingsPathArg("s", "settingsPath", "Path to webcam calibration and ORB settings yaml file", false, "../webcam.yaml", "string");
-		ValueArg<int> cameraIndexArg("c", "camIndex", "Index of the webcam to use", false, 0, "integer");
-		ValueArg<int> cameraWidthArg("W", "width", "Desired width of the camera", false, 0, "integer");
-		ValueArg<int> cameraHeightArg("H", "height", "Desired height of the camera", false, 0, "integer");
-		SwitchArg loadMapArg("l", "loadMap", "Load map file", false);
+	bool result = true;
+	CommandLine cmd(argc, argv);
 
-		// add the args
-		cmd.add(vocabPathArg);
-		cmd.add(settingsPathArg);
-		cmd.add(cameraIndexArg);
-		cmd.add(cameraWidthArg);
-		cmd.add(cameraHeightArg);
-		cmd.add(loadMapArg);
+	if (cmd.ContainsKey("v"))
+		if (!cmd.GetStringValue("v", vocabPath)) result = false;
 
-		// parse the args
-		cmd.parse(argc, argv);
+	if (cmd.ContainsKey("s"))
+		if (!cmd.GetStringValue("s", settingsPath)) result = false;
 
-		// get the results
-		vocabPath = vocabPathArg.getValue();
-		settingsPath = settingsPathArg.getValue();
-		cameraIndex = cameraIndexArg.getValue();
-		width = cameraWidthArg.getValue();
-		height = cameraHeightArg.getValue();
-		loadMap = loadMapArg.getValue();
-
-	} // catch any exceptions 
-	catch (ArgException &e) {
-		cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
-		return 1;
+	if (cmd.ContainsKey("c"))
+	{
+		if (!cmd.GetIntValue("c", cameraIndex)) result = false;
 	}
-	return 0;
+
+	if (cmd.ContainsKey("l"))
+		loadMap = true;
+
+	if (cmd.ContainsKey("r"))
+	{
+		vector<int> resolution;
+		if (!cmd.GetMultiIntValue("r", resolution))
+			result = false;
+		else
+		{
+			width = resolution[0];
+			height = resolution[1];
+		}
+	}
+
+	if (cmd.ContainsKey("h"))
+	{
+
+	}
+
+	return result;
 }
 
 
