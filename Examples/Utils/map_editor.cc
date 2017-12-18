@@ -90,6 +90,11 @@ bool parseProgramArguments(int argc, const char *argv[])
 	if (cmd.ContainsKey("m"))
 		if (!cmd.GetStringValue("m", filePath)) result = false;
 
+	if (cmd.ContainsKey("h"))
+	{
+
+	}
+
 	return result;
 }
 
