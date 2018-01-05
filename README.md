@@ -29,7 +29,7 @@ The ORB_SLAM2 project contains some code modified from the original version, and
 ### Building with vcpkg
 Build using script 'build.bat', which builds specifically for Visual Studio 15 2017 Win64 (you can modify this to match your installed generator). The build script relies on vcpkg, so update the toolchain file location in build.bat.
 
-Required vcpkg ports: boost:x64-windows eigen3:x64-windows opencv:x64-windows pangolin:x64-windows tclap:x64-windows
+Required vcpkg ports: boost:x64-windows eigen3:x64-windows opencv:x64-windows pangolin:x64-windows
 
 Optional vcpkg ports: kinectsdk2:x64-windows (untested, it also works to install this with the standard windows installer. If you want to use vcpkg to find KinectSDK you may need to remove "FindKinectSDK2.cmake" from ./Cmake/Modules)
 
