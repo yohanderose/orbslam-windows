@@ -56,20 +56,19 @@ int main(int argc, const char *argv[])
 	}
 
 	System *SLAM = NULL;
-	
 	SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, true);
 
 	// Main loop
 	Mat black = Mat::zeros(500, 500, CV_8UC1);
 	while (true)
 	{
-		imshow("Press Esc key to quit", black);
-		if (27 == waitKey(1)) break;
+		SLAM->TrackMonocular(black, 0);
+		
 	}
 
 	// Stop all threads
-	SLAM->Shutdown();
-	SLAM->SaveMap("Slam_Map_Edited.bin");
+	//SLAM->Shutdown();
+	//SLAM->SaveMap("Slam_Map_Edited.bin");
 
 	delete SLAM;
 	return EXIT_SUCCESS;

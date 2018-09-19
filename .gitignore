@@ -19,6 +19,7 @@ Thirdparty/g2o/config.h
 Thirdparty/g2o/lib/
 Thirdparty/g2o/bin/
 Vocabulary/ORBvoc.txt
+Vocabulary/ORBvoc.bin
 build/
 *~
 lib/
@@ -327,3 +328,7 @@ __pycache__/
 *.exe
 /Scripts/CameraTrajectory.txt
 /Scripts/s-calib.yaml
+
+Slam_Map.bin
+stadium-groundplane.txt
+stadium-s6-all.mp4

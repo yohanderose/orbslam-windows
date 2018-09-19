@@ -26,11 +26,10 @@
 
 #include <System.h>
 #include <opencv2/core/core.hpp>
-#include <pangolin/pangolin.h>
+#include <opencv2/highgui.hpp>
 
-#include "../Utils/KinectRgbd.h"
-#include "../Utils/CommandLine.h"
 #include "../Utils/MyARViewer.h"
+#include "../Utils/CommandLine.h"
 
 
 using namespace std;
@@ -38,106 +37,87 @@ using namespace cv;
 using namespace ORB_SLAM2;
 
 
+/* Forward function declarations */
 bool parseProgramArguments(int argc, const char *argv[]);
-void scaleCalib();
+bool scaleCalib();
 void scaleIm(Mat &im);
-void settingsFileUpdate(string &filePath, string name, string val);
+void settingsFileUpdate(std::string &filePath, std::string name, std::string val);
 
-
+/* Program arg globals */
 string vocabPath;
 string settingsPath;
-
+string filePath;
 int cameraIndex;
-int cameraWidth;
-int cameraHeight;
-
+int width;
+int height;
 bool loadMap;
+bool webcamMode;
 
+/* Misc globals */
 Mat cameraPose;
 
-
-
-#include <mutex>
-mutex cMtx, dMtx;
-Mat cfMat;
-Mat dfMat;
-bool cReady = false;
-bool dReady = false;
-double ts;
-
-void GetColorFrame(Mat &cf)
-{
-	unique_lock<mutex> lock(cMtx);
-	cf.copyTo(cfMat);
-	cReady = true;
-}
-void GetDepthFrame(Mat &df)
-{
-	unique_lock<mutex> lock(dMtx);
-	df.copyTo(dfMat);
-	dReady = true;
-}
-
+/* Main */
 int main(int argc, const char *argv[])
 {
-	// parse the command line args
+	// Parse the command line args
 	if (!parseProgramArguments(argc, argv)) {
-		cerr << "[Warning] -- Failed to parse command line arguments -- exiting." << endl;
+		cerr << "[Error] -- Failed to parse command line arguments -- exiting." << endl;
 		return EXIT_FAILURE;
 	}
 
 	System *SLAM = NULL;
 
-	scaleCalib();
-
-	KinectRgbd k;
-	if (!k.IsValid())
-	{
-		cerr << "[Warning] -- Could not detect Kinect sensor." << endl;
-		return EXIT_FAILURE;
-	}
-	k.StartColorStream(GetColorFrame);
-	k.StartDepthStream(GetDepthFrame);
+	FileStorage fsSettings(settingsPath, FileStorage::READ);
+	int calibWidth = fsSettings["Camera.width"];
+	int calibHeight = fsSettings["Camera.height"];
 	
-
+	// If we are trying to resize, try to scale the calibration file, if that works, resize rectified images as they arrive
+	bool sizeArgsSet = false;
+	if (width > 0 && height > 0)
+	{
+		sizeArgsSet = scaleCalib();
+	}
+	if (!sizeArgsSet)
+	{
+		width = calibWidth;
+		height = calibHeight;
+	}
+	
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
 	if (loadMap)
 	{
-		SLAM = new System(vocabPath, settingsPath, System::RGBD, true, true);
+		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, true);
 	}
 	else
 	{
-		SLAM = new System(vocabPath, settingsPath, System::RGBD, true, false);
+		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, false);
 	}
 
 	// Set up the opengl AR frame
-	MyARViewer viewer(SLAM, settingsPath, cameraWidth, cameraHeight);
+	MyARViewer viewer(SLAM, settingsPath, width, height);
 
-	cout << endl << "-------" << endl;
-	cout << "Start processing sequence ..." << endl;
-
-	// From http://stackoverflow.com/questions/19555121/how-to-get-current-timestamp-in-milliseconds-since-1970-just-the-way-java-gets
-	__int64 now = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch()).count();
-
+	// Main loop
 	while (true)
 	{
-		unique_lock<mutex> lock(dMtx);
-		unique_lock<mutex> lock2(cMtx);
-
-		if (cReady && dReady)
+		Mat im = imread(filePath, CV_LOAD_IMAGE_COLOR);
+		// Check that it is all good
+		if (im.empty() || im.channels() != 3)
 		{
-			scaleIm(cfMat);
-			scaleIm(dfMat);
-
-			__int64 curNow = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch()).count();
-
-			// Pass the image to the SLAM system
-			cameraPose = SLAM->TrackRGBD(cfMat, dfMat, curNow / 1000.0);		
-			viewer.renderARFrame(cameraPose, cfMat);
-
-			cReady = false;
-			dReady = false;
+			break;
 		}
+
+		// Resize im if necessary
+		if (sizeArgsSet)
+		{
+			scaleIm(im);
+		}
+
+		// Get the timestamp
+		__int64 curNow = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+		// Pass the image to the SLAM system
+		cameraPose = SLAM->TrackMonocular(im, curNow / 1000.0);
+		viewer.renderARFrame(cameraPose, im);
 	}
 
 	// Stop all threads
@@ -145,11 +125,11 @@ int main(int argc, const char *argv[])
 	if (!loadMap)
 		SLAM->SaveMap("Slam_Map.bin");
 
-
 	delete SLAM;
 	return EXIT_SUCCESS;
 }
 
+/* Parses the program arguments and sets the global variables using tclap */
 bool parseProgramArguments(int argc, const char *argv[])
 {
 	bool result = true;
@@ -161,9 +141,9 @@ bool parseProgramArguments(int argc, const char *argv[])
 	if (cmd.ContainsKey("s"))
 		if (!cmd.GetStringValue("s", settingsPath)) result = false;
 
-	if (cmd.ContainsKey("c"))
+	if (cmd.ContainsKey("i"))
 	{
-		if (!cmd.GetIntValue("c", cameraIndex)) result = false;
+		if (!cmd.GetStringValue("i", filePath)) result = false;
 	}
 
 	if (cmd.ContainsKey("l"))
@@ -176,8 +156,8 @@ bool parseProgramArguments(int argc, const char *argv[])
 			result = false;
 		else
 		{
-			cameraWidth = resolution[0];
-			cameraHeight = resolution[1];
+			width = resolution[0];
+			height = resolution[1];
 		}
 	}
 
@@ -189,47 +169,45 @@ bool parseProgramArguments(int argc, const char *argv[])
 	return result;
 }
 
-
 /* Scales the calibration data to the input video resolution */
-void scaleCalib()
+bool scaleCalib()
 {
 	// open the original calibration
 	FileStorage fsSettings(settingsPath, FileStorage::READ);
 
 	// get the calibration and input resolutions
-	double calibWidth = double(fsSettings["Camera.width"]);
-	double calibHeight = double(fsSettings["Camera.height"]);
-	double videoWidth = cameraWidth > 0 ? cameraWidth : calibWidth;
-	double videoHeight = cameraHeight > 0 ? cameraHeight : calibHeight;
+	double calibWidth = fsSettings["Camera.width"];
+	double calibHeight = fsSettings["Camera.height"];
 
 	// only continue if the calibration file actually had the calibration resolution inside
 	if (calibWidth <= 0 || calibHeight <= 0)
 	{
 		cout << "Camera.width and Camera.height not found in calibration file, scaling is impossible." << endl;
-		return;
+		return false;
 	}
 
 	// calculate scaling
-	double sw = videoWidth / calibWidth;
-	double sh = videoHeight / calibHeight;
+	double sw = width / calibWidth;
+	double sh = height / calibHeight;
 
 	// vertical and horizontal scaling must be equal and not 1
-	if (sw == 1.0 || sw != sh)
+	if (width == calibWidth || sw != sh)
 	{
 		cout << "Calibration file does not require scaling, or is unable to be scaled." << endl;
-		return;
+		return false;
 	}
 	else
 	{
 		cout << "Scaling calibration file by factor: " << sw << endl;
 	}
+
 	// delete any traces of the previously used scaled calibration file
 	const char *tempSettingsPath = "s-calib.yaml";
-	std::remove(tempSettingsPath);
+	remove(tempSettingsPath);
 
 	// copy the calibration file
-	ifstream src(settingsPath, ios::binary);
-	ofstream dst(tempSettingsPath, ios::binary);
+	std::ifstream src(settingsPath, std::ios::binary);
+	std::ofstream dst(tempSettingsPath, std::ios::binary);
 	dst << src.rdbuf();
 	dst.close();
 
@@ -238,22 +216,23 @@ void scaleCalib()
 	float fy = fsSettings["Camera.fy"];
 	float cx = fsSettings["Camera.cx"];
 	float cy = fsSettings["Camera.cy"];
-	settingsFileUpdate(string(tempSettingsPath), "Camera.fx", to_string(fx * sw));
-	settingsFileUpdate(string(tempSettingsPath), "Camera.fy", to_string(fy * sw));
-	settingsFileUpdate(string(tempSettingsPath), "Camera.cx", to_string(cx * sw));
-	settingsFileUpdate(string(tempSettingsPath), "Camera.cy", to_string(cy * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fx", std::to_string(fx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.fy", std::to_string(fy * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cx", std::to_string(cx * sw));
+	settingsFileUpdate(std::string(tempSettingsPath), "Camera.cy", std::to_string(cy * sw));
 
 	// overwrite the settings path
 	settingsPath = tempSettingsPath;
+	return true;
 }
 void scaleIm(Mat &im)
 {
-	if (cameraWidth != im.cols && cameraWidth != -1)
-		resize(im, im, Size(cameraWidth, cameraHeight));
+	if (width != im.cols || height != im.rows)
+		resize(im, im, Size(width, height), 0.0, 0.0, CV_INTER_AREA);
 }
-void settingsFileUpdate(string &filePath, string name, string val)
+void settingsFileUpdate(std::string &filePath, std::string name, std::string val)
 {
-	std::remove((filePath + ".tmp").c_str());
+	remove((filePath + ".tmp").c_str());
 
 	ifstream inFile(filePath);
 	ofstream outFile(filePath + ".tmp");
@@ -279,6 +258,7 @@ void settingsFileUpdate(string &filePath, string name, string val)
 		}
 		inFile.close();
 	}
-	std::remove(filePath.c_str());
+	remove(filePath.c_str());
 	rename((filePath + ".tmp").c_str(), filePath.c_str());
 }
+

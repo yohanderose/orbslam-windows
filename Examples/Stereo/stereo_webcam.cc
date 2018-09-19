@@ -137,7 +137,7 @@ int main(int argc, const char *argv[])
 	Mat frameLeftRect, frameRightRect;
 
 	string inputWindowTitle = "Rectified stereo input -- Press Esc to quit";
-	namedWindow(inputWindowTitle, CV_WINDOW_NORMAL);
+	namedWindow(inputWindowTitle, CV_WINDOW_AUTOSIZE);
 	for (long long i = 0; true; ++i)
 	{
 		long long ts = 0;
@@ -154,8 +154,12 @@ int main(int argc, const char *argv[])
 		{
 			vector<string> paths;
 			sync.GetSyncedFramePaths(paths);
-			if (i < 1800) continue;
-			frameLeft = imread(paths[1], CV_LOAD_IMAGE_COLOR);
+			//if (i < 2500) continue;
+			if (paths.empty())
+			{
+				break;
+			}
+			frameLeft = imread(paths[0], CV_LOAD_IMAGE_COLOR);
 			frameRight = imread(paths[2], CV_LOAD_IMAGE_COLOR);
 			ts = stoll(boost::filesystem::path(paths[0]).stem().generic_string());
 		}

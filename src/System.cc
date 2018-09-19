@@ -106,7 +106,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
 	if (bReuse)
 	{
-		LoadMap("Slam_Map.bin");
+		LoadMap("../Slam_Map.bin");
         
         //mpKeyFrameDatabase->set_vocab(mpVocabulary);
        
@@ -361,6 +361,8 @@ void System::DeactivateEditMode()
 {
 	unique_lock<mutex> lock(mMutexMode);
 	mbDeactivateEditMode = true;
+	std::cout << "DeactivateEditMode" << std::endl;
+	SaveMap("Slam_Map_Edited.bin");
 }
 
 bool System::MapChanged()
@@ -429,6 +431,25 @@ void System::SaveMap(const string &filename)
         oa << mpMap;
     }
     cout << endl << "Map saved to " << filename << endl;
+
+	std::ofstream os2(filename + ".xyz", std::ios::out);
+	std::vector<ORB_SLAM2::MapPoint *> mapPoints = GetAllMapPoints();
+	std::vector<cv::Point3f> worldPoints;
+	for (std::vector<ORB_SLAM2::MapPoint *>::iterator mit = mapPoints.begin(); mit != mapPoints.end(); mit++)
+	{
+		if (*mit == NULL)
+			continue;
+
+		cv::Mat wp = (*mit)->GetWorldPos();
+		worldPoints.push_back(cv::Point3f(
+			wp.at<float>(0, 0),
+			wp.at<float>(1, 0),
+			wp.at<float>(2, 0)));
+	}
+	for (cv::Point3f p : worldPoints)
+	{
+		os2 << p.x << " " << p.y << " " << p.z << std::endl;
+	}
 }
 
 

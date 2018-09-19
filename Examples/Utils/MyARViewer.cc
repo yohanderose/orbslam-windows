@@ -15,7 +15,9 @@ MyARViewer::MyARViewer(ORB_SLAM2::System* system, const string &settingsPath, in
 	: system(system), settingsPath(settingsPath), width(width), height(height)
 {
 	CreateWindowAndBind("MyARViewer", width, height);
-	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_TEST);	
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	winState.handler.SetContext(this);
 	winState.viewReal = CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0, (double)-width / (double)height).SetHandler(&winState.handler);
@@ -29,8 +31,8 @@ MyARViewer::MyARViewer(ORB_SLAM2::System* system, const string &settingsPath, in
 		fsSettings["Camera.fy"],
 		fsSettings["Camera.cx"],
 		fsSettings["Camera.cy"],
-		0.2,
-		100
+		0.00001,
+		2
 	);
 	winState.camState = OpenGlRenderState(winState.cameraMatrix);
 	winState.K = Mat::eye(3, 3, CV_32F);
@@ -45,6 +47,21 @@ MyARViewer::MyARViewer(ORB_SLAM2::System* system, const string &settingsPath, in
 	winState.distCoeffs.at<float>(2) = fsSettings["Camera.p1"];
 	winState.distCoeffs.at<float>(3) = fsSettings["Camera.p2"];
 	winState.distCoeffs.at<float>(4) = fsSettings["Camera.k3"];
+
+	ifstream fGroundplane("../stadium-groundplane.txt", ifstream::in);
+	if (fGroundplane.is_open())
+	{
+		while (!fGroundplane.eof())
+		{
+			string line;
+			std::getline(fGroundplane, line);
+			
+			stringstream ss(line);
+			float x, y, z;
+			ss >> x >> y >> z;
+			groundPlaneCorners.push_back(cv::Point3f(x,y,z));
+		}
+	}
 }
 
 MyARViewer::~MyARViewer()
@@ -159,6 +176,7 @@ bool MyARViewer::renderARFrame(Mat cameraPose, Mat im)
 		GlTexture imageTexture(camFrameUn.cols, camFrameUn.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
 		imageTexture.Upload(camFrameUn.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
 		winState.viewReal.Activate();
+
 		glColor3f(1.0, 1.0, 1.0);
 		imageTexture.RenderToViewport(true);
 
@@ -195,6 +213,27 @@ bool MyARViewer::renderARFrame(Mat cameraPose, Mat im)
 			}
 			glEnd();
 
+			// Draw ground plane
+			glPointSize(15.0f);
+			glColor4f(1.0f, 0.0f, 1.0f, 0.25f);
+			glBegin(GL_QUADS);
+			for (int i = 0; i < groundPlaneCorners.size(); ++i)
+			{
+				glVertex3f(groundPlaneCorners[i].x, -groundPlaneCorners[i].y, -groundPlaneCorners[i].z);
+			}
+			glEnd();
+			//glColor4f(0.0f, 0.0f, 1.0f, 0.5f);
+			//GLfloat vertices[] = {
+			//	groundPlaneCorners[0].x, -groundPlaneCorners[0].y, -groundPlaneCorners[0].z, // bottom left corner
+			//	groundPlaneCorners[1].x, -groundPlaneCorners[1].y, -groundPlaneCorners[1].z,
+			//	groundPlaneCorners[2].x, -groundPlaneCorners[2].y, -groundPlaneCorners[2].z,
+			//	groundPlaneCorners[3].x, -groundPlaneCorners[3].y, -groundPlaneCorners[3].z
+			//};
+			//GLubyte indices[] = { 0,1,2, // first triangle (bottom left - top left - top right)
+			//	0,2,3 }; // second triangle (bottom left - top right - bottom right)
+			//glVertexPointer(3, GL_FLOAT, 0, vertices);
+			//glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, indices);
+
 			// Draw cubes
 			for (ARCube cube : cubes)
 			{
@@ -217,7 +256,6 @@ bool MyARViewer::renderARFrame(Mat cameraPose, Mat im)
 
 		// Swap frames and Process Events
 		FinishFrame();
-
 		return ShouldQuit();
 	}
 }

@@ -108,6 +108,21 @@ add_executable(mono_video
 )
 target_link_libraries(mono_video ${PROJECT_NAME})
 
+# Build tracking test project
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
+add_executable(tracking_test
+	Examples/Monocular/tracking_test.cc
+	Examples/Utils/MyTrackingVisualizer.cc
+)
+target_link_libraries(tracking_test ${PROJECT_NAME})
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
+add_executable(mono_image_loc
+	Examples/Monocular/mono_image_loc.cc
+	Examples/Utils/MyARViewer.cc
+)
+target_link_libraries(mono_image_loc ${PROJECT_NAME})
+
 # Build kinect2 project
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 find_package(KinectSDK2 QUIET)

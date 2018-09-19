@@ -28,8 +28,8 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
 
-#include "../Utils/MyARViewer.h"
 #include "../Utils/CommandLine.h"
+#include "../Utils/MyTrackingVisualizer.h"
 
 
 using namespace std;
@@ -46,19 +46,21 @@ void settingsFileUpdate(std::string &filePath, std::string name, std::string val
 /* Program arg globals */
 string vocabPath;
 string settingsPath;
-string filePath;
+string videoPath;
+string modelPath;
 int cameraIndex;
 int width;
 int height;
-bool loadMap;
-bool webcamMode;
 
 /* Misc globals */
 Mat cameraPose;
+Mat K;
 
 /* Main */
 int main(int argc, const char *argv[])
 {
+	cout << "NOT WORKING ON THIS ANYMORE: use my tracking-tools repo for this kind of thing." << endl;
+
 	// Parse the command line args
 	if (!parseProgramArguments(argc, argv)) {
 		cerr << "[Error] -- Failed to parse command line arguments -- exiting." << endl;
@@ -74,14 +76,7 @@ int main(int argc, const char *argv[])
 	VideoCapture cap;
 
 	// Set up video source
-	if (webcamMode)
-	{
-		cap = VideoCapture(cameraIndex); 
-	}
-	else
-	{
-		cap = VideoCapture(filePath);
-	}
+	cap = VideoCapture(videoPath);
 
 	if (!cap.isOpened())
 	{
@@ -102,28 +97,26 @@ int main(int argc, const char *argv[])
 		width = calibWidth;
 		height = calibHeight;
 	}
+
+	// read and initialize K
+	FileStorage fsSettingsScaled(settingsPath, FileStorage::READ);
+	K = Mat::eye(Size(3, 3), CV_32F);
+	K.at<float>(0, 0) = fsSettingsScaled["Camera.fx"];
+	K.at<float>(1, 1) = fsSettingsScaled["Camera.fy"];
+	K.at<float>(0, 2) = fsSettingsScaled["Camera.cx"];
+	K.at<float>(1, 2) = fsSettingsScaled["Camera.cy"];
 	
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
-	if (loadMap)
-	{
-		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, true);
-	}
-	else
-	{
-		SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, false);
-	}
+	SLAM = new System(vocabPath, settingsPath, System::MONOCULAR, true, false);
 
-	// Set up the opengl AR frame
-	MyARViewer viewer(SLAM, settingsPath, width, height);
+	MyTrackingVisualizer visualizer(modelPath);
 
 	// Main loop
 	Mat im;
-	cap.set(CAP_PROP_POS_FRAMES, 2500);
+	int state = 1;
 	while (true)
 	{
-
 		// Get the frame
-		cap >> im;
 		cap >> im;
 
 		// Check that it is all good
@@ -143,13 +136,23 @@ int main(int argc, const char *argv[])
 
 		// Pass the image to the SLAM system
 		cameraPose = SLAM->TrackMonocular(im, curNow / 1000.0);
-		viewer.renderARFrame(cameraPose, im);
+		if (state == 1 && SLAM->GetTrackingState() == 2)
+		{
+			cout << "Aligning model ... ";
+			bool modelAligned = true;
+			while (!modelAligned)
+			{
+				//modelAligned = visualizer.alignModel(im, K);
+			}
+			cout << visualizer.getReferencePose() << endl;
+			cout << "Done" << endl;
+		}
+		state = SLAM->GetTrackingState();
 	}
 
 	// Stop all threads
 	SLAM->Shutdown();
-	if (!loadMap)
-		SLAM->SaveMap("../Slam_Map.bin");
+	SLAM->SaveMap("Slam_Map.bin");
 
 	cap.release();
 
@@ -171,18 +174,12 @@ bool parseProgramArguments(int argc, const char *argv[])
 
 	if (cmd.ContainsKey("c"))
 	{
-		if (cmd.GetIntValue("c", cameraIndex))
-		{
-			webcamMode = true;
-		}
-		else if (!cmd.GetStringValue("c", filePath))
-		{
-			result = false;
-		}
+		if (!cmd.GetStringValue("c", videoPath)) result = false;
 	}
-
-	if (cmd.ContainsKey("l"))
-		loadMap = true;
+	if (cmd.ContainsKey("m"))
+	{
+		if (!cmd.GetStringValue("m", modelPath)) result = false;
+	}
 
 	if (cmd.ContainsKey("r"))
 	{

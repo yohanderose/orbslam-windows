@@ -73,6 +73,8 @@ class MyARViewer
 								wp.at<float>(1, 0),
 								wp.at<float>(2, 0)
 							);
+							cout << "Placing cube at mapPoint: " << endl;
+							cout << cv::Vec3f(wp) << endl;
 							cube.scale = 0.005;
 
 							Plane p;
@@ -207,6 +209,7 @@ private:
 
 	std::vector<cv::Point3f> worldPoints;
 	std::vector<ARCube> cubes;
+	std::vector<cv::Point3f> groundPlaneCorners;
 	int cubesIdx = -1;
 
 	cv::Mat lastCameraPose;
