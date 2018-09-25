@@ -197,7 +197,7 @@ class MyARViewer
 	};
 
 public:
-	MyARViewer(ORB_SLAM2::System* system, const std::string &settingsPath, int width, int height);
+	MyARViewer(ORB_SLAM2::System* system, const std::string &settingsPath, int width, int height, bool showGroundPlane);
 	~MyARViewer();
 
 private:
@@ -213,6 +213,7 @@ private:
 	int cubesIdx = -1;
 
 	cv::Mat lastCameraPose;
+	bool showGroundPlane;
 
 public:
 	bool getPlaneRansac(Plane &p, std::vector<ORB_SLAM2::MapPoint *> vMP, std::vector<bool> vbMap);

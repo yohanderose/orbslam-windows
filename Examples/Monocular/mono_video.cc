@@ -114,17 +114,17 @@ int main(int argc, const char *argv[])
 	}
 
 	// Set up the opengl AR frame
-	MyARViewer viewer(SLAM, settingsPath, width, height);
+	MyARViewer viewer(SLAM, settingsPath, width, height, !webcamMode);
 
 	// Main loop
 	Mat im;
-	cap.set(CAP_PROP_POS_FRAMES, 2500);
+	//cap.set(CAP_PROP_POS_FRAMES, 2500);
 	while (true)
 	{
 
 		// Get the frame
 		cap >> im;
-		cap >> im;
+		//cap >> im;
 
 		// Check that it is all good
 		if (im.empty() || im.channels() != 3)

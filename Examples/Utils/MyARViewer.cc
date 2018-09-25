@@ -11,8 +11,8 @@ using namespace cv;
 using namespace pangolin;
 
 
-MyARViewer::MyARViewer(ORB_SLAM2::System* system, const string &settingsPath, int width, int height)
-	: system(system), settingsPath(settingsPath), width(width), height(height)
+MyARViewer::MyARViewer(ORB_SLAM2::System* system, const string &settingsPath, int width, int height, bool showGroundPlane)
+	: system(system), settingsPath(settingsPath), width(width), height(height), showGroundPlane(showGroundPlane)
 {
 	CreateWindowAndBind("MyARViewer", width, height);
 	glEnable(GL_DEPTH_TEST);	
@@ -214,25 +214,17 @@ bool MyARViewer::renderARFrame(Mat cameraPose, Mat im)
 			glEnd();
 
 			// Draw ground plane
-			glPointSize(15.0f);
-			glColor4f(1.0f, 0.0f, 1.0f, 0.25f);
-			glBegin(GL_QUADS);
-			for (int i = 0; i < groundPlaneCorners.size(); ++i)
+			if (showGroundPlane)
 			{
-				glVertex3f(groundPlaneCorners[i].x, -groundPlaneCorners[i].y, -groundPlaneCorners[i].z);
+				glPointSize(15.0f);
+				glColor4f(1.0f, 0.0f, 1.0f, 0.25f);
+				glBegin(GL_QUADS);
+				for (int i = 0; i < groundPlaneCorners.size(); ++i)
+				{
+					glVertex3f(groundPlaneCorners[i].x, -groundPlaneCorners[i].y, -groundPlaneCorners[i].z);
+				}
+				glEnd();
 			}
-			glEnd();
-			//glColor4f(0.0f, 0.0f, 1.0f, 0.5f);
-			//GLfloat vertices[] = {
-			//	groundPlaneCorners[0].x, -groundPlaneCorners[0].y, -groundPlaneCorners[0].z, // bottom left corner
-			//	groundPlaneCorners[1].x, -groundPlaneCorners[1].y, -groundPlaneCorners[1].z,
-			//	groundPlaneCorners[2].x, -groundPlaneCorners[2].y, -groundPlaneCorners[2].z,
-			//	groundPlaneCorners[3].x, -groundPlaneCorners[3].y, -groundPlaneCorners[3].z
-			//};
-			//GLubyte indices[] = { 0,1,2, // first triangle (bottom left - top left - top right)
-			//	0,2,3 }; // second triangle (bottom left - top right - bottom right)
-			//glVertexPointer(3, GL_FLOAT, 0, vertices);
-			//glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, indices);
 
 			// Draw cubes
 			for (ARCube cube : cubes)
