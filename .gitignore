@@ -331,4 +331,4 @@ __pycache__/
 
 Slam_Map.bin
 stadium-groundplane.txt
-stadium-s6-all.mp4
+*.mp4

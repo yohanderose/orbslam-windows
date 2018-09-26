@@ -214,6 +214,10 @@ private:
 
 	cv::Mat lastCameraPose;
 	bool showGroundPlane;
+	bool showHeatmap;
+	cv::Mat heatmap;
+	GLuint heatmapTex;
+	pangolin::GlTexture heatmapTexPangolin;
 
 public:
 	bool getPlaneRansac(Plane &p, std::vector<ORB_SLAM2::MapPoint *> vMP, std::vector<bool> vbMap);

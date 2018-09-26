@@ -12,7 +12,7 @@ using namespace pangolin;
 
 
 MyARViewer::MyARViewer(ORB_SLAM2::System* system, const string &settingsPath, int width, int height, bool showGroundPlane)
-	: system(system), settingsPath(settingsPath), width(width), height(height), showGroundPlane(showGroundPlane)
+	: system(system), settingsPath(settingsPath), width(width), height(height), showGroundPlane(showGroundPlane), showHeatmap(false)
 {
 	CreateWindowAndBind("MyARViewer", width, height);
 	glEnable(GL_DEPTH_TEST);	
@@ -61,6 +61,15 @@ MyARViewer::MyARViewer(ORB_SLAM2::System* system, const string &settingsPath, in
 			ss >> x >> y >> z;
 			groundPlaneCorners.push_back(cv::Point3f(x,y,z));
 		}
+	}
+
+	heatmap = imread("../heatmap.png", CV_LOAD_IMAGE_ANYCOLOR);
+	if (!heatmap.empty())
+	{
+		cvtColor(heatmap, heatmap, CV_BGR2RGB);
+		heatmapTexPangolin.Reinitialise(heatmap.cols, heatmap.rows, GL_RGB, false, 0, GL_RGB, GL_UNSIGNED_BYTE);
+		heatmapTexPangolin.Upload(heatmap.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
+		showHeatmap = true;
 	}
 }
 
@@ -177,7 +186,7 @@ bool MyARViewer::renderARFrame(Mat cameraPose, Mat im)
 		imageTexture.Upload(camFrameUn.ptr(), GL_RGB, GL_UNSIGNED_BYTE);
 		winState.viewReal.Activate();
 
-		glColor3f(1.0, 1.0, 1.0);
+		glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 		imageTexture.RenderToViewport(true);
 
 		// render the AR objects
@@ -214,9 +223,23 @@ bool MyARViewer::renderARFrame(Mat cameraPose, Mat im)
 			glEnd();
 
 			// Draw ground plane
-			if (showGroundPlane)
+			if (showGroundPlane && showHeatmap)
 			{
-				glPointSize(15.0f);
+				glColor4f(1.0f, 1.0f, 1.0f, 0.5f);
+				heatmapTexPangolin.Bind();
+				glEnable(GL_TEXTURE_2D);
+				glBegin(GL_QUADS);
+				Eigen::Vector2i texcoords[4] = { Eigen::Vector2i(0,0),Eigen::Vector2i(0,1),Eigen::Vector2i(1,1),Eigen::Vector2i(1,0) };
+				for (int i = 0; i < groundPlaneCorners.size() && i < 4; ++i)
+				{
+					glTexCoord2i(texcoords[i].x(), texcoords[i].y());
+					glVertex3f(groundPlaneCorners[i].x, -groundPlaneCorners[i].y, -groundPlaneCorners[i].z);
+				}
+				glEnd();
+				glDisable(GL_TEXTURE_2D);
+			}
+			else if (showGroundPlane && !showHeatmap)
+			{
 				glColor4f(1.0f, 0.0f, 1.0f, 0.25f);
 				glBegin(GL_QUADS);
 				for (int i = 0; i < groundPlaneCorners.size(); ++i)
